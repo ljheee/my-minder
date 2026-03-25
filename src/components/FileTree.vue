@@ -85,7 +85,7 @@
             :key="repo.id"
             class="repo-item"
             :class="{ active: selectedRepo && selectedRepo.id === repo.id }"
-            @click="selectRepo(repo)"
+            @click="handleSelectRepo(repo)"
           >
             <div class="repo-item-info">
               <span class="repo-item-name">{{ repo.name }}</span>
@@ -299,7 +299,7 @@ export default {
   },
 
   methods: {
-    ...mapActions('auth', ['selectRepo']),
+    // selectRepo 不再通过 mapActions 映射，直接用 this.$store.dispatch 调用，避免名称冲突
     ...mapActions('files', ['loadDir', 'createFile', 'createDir', 'deleteFileItem', 'deleteDirItem', 'renameFileItem', 'moveFileItem']),
 
     async loadRootDir() {
@@ -328,8 +328,9 @@ export default {
       }
     },
 
-    async selectRepo(repo) {
-      this.$store.dispatch('auth/selectRepo', repo)
+    async handleSelectRepo(repo) {
+      // 直接调用 store action（避免与 mapActions 的 selectRepo 冲突）
+      await this.$store.dispatch('auth/selectRepo', repo)
       this.showRepoSelector = false
       this.$store.dispatch('files/clearTree')
     },
@@ -343,7 +344,7 @@ export default {
       try {
         const repo = await createRepo(this.newRepoName.trim())
         this.$message.success(`仓库 ${repo.name} 创建成功`)
-        await this.selectRepo(repo)
+        await this.handleSelectRepo(repo)
         this.newRepoName = ''
       } catch (err) {
         this.$message.error('创建仓库失败：' + (err.response?.data?.message || err.message))

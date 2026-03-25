@@ -3,6 +3,7 @@
  * 管理文件树状态、当前打开的文件
  */
 
+import Vue from 'vue'
 import {
   listContents,
   getFileContent,
@@ -342,5 +343,3 @@ export default {
   }
 }
 
-// 需要在 Vue 实例中使用 Vue.set，这里引入 Vue
-import Vue from 'vue'

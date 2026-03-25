@@ -1,13 +1,11 @@
 <template>
   <div class="editor-layout">
-    <!-- 侧边栏 -->
     <div
       class="sidebar"
       :class="{ collapsed: sidebarCollapsed }"
       :style="{ width: sidebarCollapsed ? '0' : sidebarWidth + 'px' }"
     >
       <div class="sidebar-inner">
-        <!-- 用户信息栏 -->
         <div class="user-bar">
           <img
             v-if="user && user.avatar_url"
@@ -23,21 +21,16 @@
           </button>
         </div>
 
-        <!-- 文件树 -->
+        <!-- open-file 事件 → handleOpenFile（避免与 mapActions 的 openFile 冲突） -->
         <file-tree
           :current-file-path="currentFilePath"
-          @open-file="openFile"
+          @open-file="handleOpenFile"
         />
       </div>
 
-      <!-- 拖拽调整宽度的把手 -->
-      <div
-        class="resize-handle"
-        @mousedown="startResize"
-      ></div>
+      <div class="resize-handle" @mousedown="startResize"></div>
     </div>
 
-    <!-- 侧边栏折叠按钮 -->
     <button
       class="sidebar-toggle"
       :class="{ collapsed: sidebarCollapsed }"
@@ -50,7 +43,6 @@
       </svg>
     </button>
 
-    <!-- 主编辑区 -->
     <div class="main-area">
       <minder-editor
         :content="currentFileContent"
@@ -59,12 +51,10 @@
         :is-loading="isFileLoading"
         :is-saving="isFileSaving"
         @change="onEditorChange"
-        @save="saveFile"
+        @save="handleSave"
         @error="onEditorError"
       />
     </div>
-
-    <!-- 未保存提示（离开页面时） -->
   </div>
 </template>
 
@@ -76,10 +66,7 @@ import MinderEditor from '@/components/MinderEditor.vue'
 export default {
   name: 'EditorPage',
 
-  components: {
-    FileTree,
-    MinderEditor
-  },
+  components: { FileTree, MinderEditor },
 
   data() {
     return {
@@ -96,7 +83,7 @@ export default {
     ...mapGetters('files', ['currentFile', 'isDirty', 'isFileLoading', 'isFileSaving']),
 
     currentFilePath() {
-      return this.currentFile?.path || null
+      return this.currentFile ? this.currentFile.path : null
     },
 
     currentFileName() {
@@ -105,12 +92,11 @@ export default {
     },
 
     currentFileContent() {
-      return this.currentFile?.content || null
+      return this.currentFile ? this.currentFile.content : null
     }
   },
 
   mounted() {
-    // 监听页面关闭/刷新，提示未保存
     window.addEventListener('beforeunload', this.handleBeforeUnload)
   },
 
@@ -120,11 +106,12 @@ export default {
   },
 
   methods: {
+    // mapActions：openFile / saveCurrentFile / updateContent 直接映射到 store
     ...mapActions('auth', ['logout']),
     ...mapActions('files', ['openFile', 'saveCurrentFile', 'updateContent']),
 
-    async openFile({ path }) {
-      // 如果有未保存的修改，提示用户
+    // 本地方法名改为 handleOpenFile，避免与 mapActions 的 openFile 冲突
+    async handleOpenFile({ path }) {
       if (this.isDirty) {
         try {
           await this.$confirm(
@@ -137,19 +124,15 @@ export default {
               type: 'warning'
             }
           )
-          // 用户选择保存
           await this.saveCurrentFile()
         } catch (action) {
-          if (action === 'close') {
-            // 用户点了 X，取消操作
-            return
-          }
-          // 用户选择直接打开（不保存）
+          if (action === 'close') return
+          // 直接打开，不保存
         }
       }
-
       try {
-        await this.$store.dispatch('files/openFile', { path })
+        // 调用 store action（mapActions 映射的 openFile）
+        await this.openFile({ path })
       } catch (err) {
         this.$message.error('打开文件失败：' + err.message)
       }
@@ -159,14 +142,10 @@ export default {
       this.updateContent(content)
     },
 
-    async saveFile() {
+    async handleSave() {
       try {
         await this.saveCurrentFile()
-        this.$message({
-          message: '保存成功',
-          type: 'success',
-          duration: 1500
-        })
+        this.$message({ message: '保存成功', type: 'success', duration: 1500 })
       } catch (err) {
         this.$message.error('保存失败：' + err.message)
       }
@@ -199,8 +178,6 @@ export default {
       }
     },
 
-    // ---- 侧边栏宽度拖拽 ----
-
     startResize(e) {
       this.isResizing = true
       this.resizeStartX = e.clientX
@@ -214,8 +191,7 @@ export default {
     doResize(e) {
       if (!this.isResizing) return
       const delta = e.clientX - this.resizeStartX
-      const newWidth = Math.max(180, Math.min(480, this.resizeStartWidth + delta))
-      this.sidebarWidth = newWidth
+      this.sidebarWidth = Math.max(180, Math.min(480, this.resizeStartWidth + delta))
     },
 
     stopResize() {
@@ -238,7 +214,6 @@ export default {
   position: relative;
 }
 
-/* 侧边栏 */
 .sidebar {
   flex-shrink: 0;
   height: 100%;
@@ -255,7 +230,6 @@ export default {
   overflow: hidden;
 }
 
-/* 用户信息栏 */
 .user-bar {
   display: flex;
   align-items: center;
@@ -302,7 +276,6 @@ export default {
   color: #f38ba8;
 }
 
-/* 拖拽把手 */
 .resize-handle {
   position: absolute;
   top: 0;
@@ -319,7 +292,6 @@ export default {
   background: rgba(137, 180, 250, 0.3);
 }
 
-/* 折叠按钮 */
 .sidebar-toggle {
   position: absolute;
   top: 50%;
@@ -345,7 +317,6 @@ export default {
   background: #45475a;
 }
 
-/* 主编辑区 */
 .main-area {
   flex: 1;
   min-width: 0;
