@@ -72,12 +72,51 @@ export default {
   },
 
   watch: {
-    // content 变化时，等下一帧再更新编辑器，确保 parsedJson 已经稳定
-    content(newVal, oldVal) {
-      if (newVal === oldVal) return
+    // 专门追踪 props.content 的变化
+    content: {
+      handler(newVal, oldVal) {
+        console.log('[MinderEditor props.content watch] newVal:', newVal ? `'${newVal.substring(0, 60)}...'` : null, 'oldVal:', oldVal ? '...' : null)
+        
+        if (newVal === oldVal) {
+          console.log('[MinderEditor props.content watch] 值相同，跳过')
+          return
+        }
+        
+        this.processContent(newVal)
+      },
+      immediate: true  // 组件创建时立即执行一次
+    }
+  },
 
+  mounted() {
+    this.calcHeight()
+    window.addEventListener('resize', this.calcHeight)
+    document.addEventListener('keydown', this.onKeydown)
+
+    // 如果挂载时 content 已经有值，立即初始化
+    if (this.content) {
+      console.log('[MinderEditor] 挂载时 content 已存在，长度:', this.content.length)
+      this.processContent(this.content)
+    } else {
+      console.log('[MinderEditor] 挂载时 content 为空，等待变化...')
+    }
+
+    // 额外添加 $watch 监听 content 变化（作为备用）
+    this.$watch('content', (newVal, oldVal) => {
+      console.log('[MinderEditor $watch] content 变化:', newVal ? '有新值' : 'null')
+    })
+  },
+
+  beforeDestroy() {
+    window.removeEventListener('resize', this.calcHeight)
+    document.removeEventListener('keydown', this.onKeydown)
+  },
+
+  methods: {
+    // 处理 content 的核心方法
+    processContent(newVal) {
       if (!newVal) {
-        // 文件被关闭
+        console.log('[MinderEditor processContent] content 为空')
         this.editorReady = false
         this.currentJson = null
         return
@@ -87,24 +126,26 @@ export default {
       let parsed = null
       try {
         const d = JSON.parse(newVal)
-        // 更宽松的检查：只要是对象就可以，不一定要有 root（可能是新建的空文件）
+        // 更宽松的检查：只要是对象就可以，不一定要有 root
         if (d && typeof d === 'object') {
           parsed = d
           if (d.theme) this.theme = d.theme
+          console.log('[MinderEditor processContent] JSON 解析成功，root:', d.root ? '✓' : '✗')
+        } else {
+          console.warn('[MinderEditor processContent] 解析结果不是对象:', typeof d)
         }
       } catch (e) {
-        console.error('JSON 解析失败:', e.message, '内容:', newVal.substring(0, 100))
+        console.error('[MinderEditor processContent] JSON 解析失败:', e.message, '内容:', newVal.substring(0, 100))
       }
 
       if (!parsed) {
-        console.warn('无法解析脑图内容，显示空状态')
+        console.warn('[MinderEditor processContent] 无法解析脑图内容，显示空状态')
         this.editorReady = false
         this.currentJson = null
         return
       }
 
       // 先隐藏编辑器（销毁旧实例），下一帧再用新数据重建
-      // 这样 minder-editor 的 mounted 读到的 importJson 一定是新值
       this.editorReady = false
       this.currentJson = null
 
@@ -114,44 +155,6 @@ export default {
         this.editorReady = true
         this.$nextTick(this.calcHeight)
       })
-    }
-  },
-
-  mounted() {
-    this.calcHeight()
-    window.addEventListener('resize', this.calcHeight)
-    document.addEventListener('keydown', this.onKeydown)
-
-    // 如果挂载时 content 已经有值（比如页面刷新后恢复状态），立即初始化
-    if (this.content) {
-      console.log('[MinderEditor] 挂载时 content 已存在，长度:', this.content.length)
-      this._initFromContent(this.content)
-    } else {
-      console.log('[MinderEditor] 挂载时 content 为空')
-    }
-  },
-
-  beforeDestroy() {
-    window.removeEventListener('resize', this.calcHeight)
-    document.removeEventListener('keydown', this.onKeydown)
-  },
-
-  methods: {
-    _initFromContent(val) {
-      try {
-        const d = JSON.parse(val)
-        if (d && typeof d === 'object') {
-          if (d.theme) this.theme = d.theme
-          this.currentJson = d
-          this.editorReady = true
-          console.log('[MinderEditor] 内容初始化成功，root:', d.root ? '✓' : '✗')
-          this.$nextTick(this.calcHeight)
-        } else {
-          console.warn('[MinderEditor] 解析结果不是对象:', typeof d)
-        }
-      } catch (e) {
-        console.error('[MinderEditor] JSON 解析失败:', e.message, '内容:', val.substring(0, 200))
-      }
     },
 
     calcHeight() {

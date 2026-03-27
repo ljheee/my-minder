@@ -58,6 +58,7 @@ export default {
     },
 
     SET_CURRENT_FILE(state, file) {
+      console.log('[store/files] SET_CURRENT_FILE mutation, file:', file?.path, 'content length:', file?.content?.length)
       state.currentFile = file
     },
 
