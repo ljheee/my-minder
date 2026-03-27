@@ -7,6 +7,10 @@ import store from './store'
 import ElementUI from 'element-ui'
 import 'element-ui/lib/theme-chalk/index.css'
 
+// vue-minder-editor-extended 全局注册（必须在 main.js 里，确保同一个 Vue 实例）
+import MinderEditorPlugin from 'vue-minder-editor-extended'
+Vue.use(MinderEditorPlugin)
+
 Vue.use(ElementUI, {
   size: 'small'
 })
