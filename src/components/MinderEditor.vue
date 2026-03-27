@@ -63,7 +63,8 @@ export default {
       editorKey: 0,
       theme: 'fresh-blue',
       editorReady: false,
-      currentJson: null
+      currentJson: null,
+      lastLoadedPath: null  // 防止重复加载
     }
   },
 
@@ -75,12 +76,12 @@ export default {
     // 直接监听 store 的 currentFile 变化，不依赖 props
     this.unsubscribe = this.$store.subscribe((mutation) => {
       if (mutation.type === 'files/SET_CURRENT_FILE') {
-        console.log('[MinderEditor store.subscribe] SET_CURRENT_FILE, file:', mutation.payload?.path, 'content:', mutation.payload?.content?.substring(0, 50))
-        if (mutation.payload?.content) {
-          this.loadContent(mutation.payload.content)
-        } else {
-          this.editorReady = false
-          this.currentJson = null
+        const file = mutation.payload
+        console.log('[MinderEditor store.subscribe] SET_CURRENT_FILE, file:', file?.path)
+        // 防止重复加载同一个文件
+        if (file?.content && file.path !== this.lastLoadedPath) {
+          this.lastLoadedPath = file.path
+          this.loadContent(file.content)
         }
       }
     })
@@ -89,6 +90,7 @@ export default {
     const initial = this.$store.getters['files/currentFile']
     if (initial?.content) {
       console.log('[MinderEditor] 初始 content 存在，长度:', initial.content.length)
+      this.lastLoadedPath = initial.path
       this.loadContent(initial.content)
     } else {
       console.log('[MinderEditor] 初始 content 为空')
