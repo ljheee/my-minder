@@ -20,14 +20,8 @@
       </div>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="isFileLoading" class="placeholder">
-      <div class="spinner"></div>
-      <p>加载中...</p>
-    </div>
-
     <!-- 空状态 -->
-    <div v-else-if="!editorReady" class="placeholder">
+    <div v-if="!editorReady" class="placeholder">
       <p style="color:#aaa">← 从左侧选择或新建一个脑图文件</p>
     </div>
 
@@ -39,7 +33,7 @@
       :height="bodyHeight"
       :theme="theme"
       style="flex:1;overflow:hidden;"
-      @save="onSave"
+      @save="onEditorSave"
     />
 
   </div>
@@ -56,14 +50,11 @@ export default {
       editorReady: false,
       currentJson: null,
       fileName: '未命名',
-      isReady: false  // 组件首次准备好，阻止初次渲染的 save 事件
+      isReady: false
     }
   },
 
   computed: {
-    isFileLoading() {
-      return this.$store.getters['files/isFileLoading']
-    },
     isDirty() {
       return this.$store.getters['files/currentFile']?.dirty || false
     },
@@ -77,14 +68,13 @@ export default {
     window.addEventListener('resize', this.calcHeight)
     document.addEventListener('keydown', this.onKeydown)
 
-    // 检查初始状态
-    const file = this.$store.getters['files/currentFile']
-    if (file?.content) {
-      this.applyContent(file)
-    }
-
-    // 标记组件准备好，允许处理 save 事件
+    // 等待 Vue 更新完成后再读取 store
     this.$nextTick(() => {
+      const file = this.$store.getters['files/currentFile']
+      if (file?.content) {
+        this.applyContent(file)
+      }
+      // 标记组件就绪
       this.isReady = true
     })
   },
@@ -95,21 +85,18 @@ export default {
   },
 
   methods: {
-    // 应用内容到编辑器
     applyContent(file) {
       if (!file?.content) return
-
       try {
         const d = JSON.parse(file.content)
         if (!d || typeof d !== 'object') return
-        
         this.fileName = file.name.replace(/\.km$/, '')
         if (d.theme) this.theme = d.theme
         this.currentJson = d
         this.editorReady = true
         this.calcHeight()
       } catch (e) {
-        console.error('[MinderEditor] JSON解析失败:', e.message)
+        console.error('[MinderEditor] 解析失败:', e.message)
         this.editorReady = false
       }
     },
@@ -120,11 +107,8 @@ export default {
       }
     },
 
-    onSave() {
-      // 组件未完全准备好时，忽略 KityMinder 的自动 save 事件
-      if (!this.isReady) {
-        return
-      }
+    onEditorSave() {
+      if (!this.isReady) return
       const ktm = this.$refs.ktmEditor
       if (!ktm) return
       const data = ktm.exportJson ? ktm.exportJson() : this.currentJson
@@ -143,7 +127,7 @@ export default {
 
     handleSave() {
       if (!this.isReady) return
-      this.onSave()
+      this.onEditorSave()
       this.$message({ message: '保存成功', type: 'success', duration: 1500 })
     }
   }
