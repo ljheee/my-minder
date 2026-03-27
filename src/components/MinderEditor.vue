@@ -102,7 +102,7 @@ export default {
     }
 
     // 额外添加 $watch 监听 content 变化（作为备用）
-    this.$watch('content', (newVal, oldVal) => {
+    this.$watch('content', (newVal) => {
       console.log('[MinderEditor $watch] content 变化:', newVal ? '有新值' : 'null')
     })
   },
