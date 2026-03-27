@@ -73,7 +73,7 @@ export default {
     document.addEventListener('keydown', this.onKeydown)
 
     // 直接监听 store 的 currentFile 变化，不依赖 props
-    this.unsubscribe = this.$store.subscribe((mutation, state) => {
+    this.unsubscribe = this.$store.subscribe((mutation) => {
       if (mutation.type === 'files/SET_CURRENT_FILE') {
         console.log('[MinderEditor store.subscribe] SET_CURRENT_FILE, file:', mutation.payload?.path, 'content:', mutation.payload?.content?.substring(0, 50))
         if (mutation.payload?.content) {
