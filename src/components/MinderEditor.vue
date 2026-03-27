@@ -4,7 +4,7 @@
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar">
       <div class="toolbar-left">
-        <span class="file-name">{{ currentFileName }}</span>
+        <span class="file-name">{{ fileName }}</span>
         <span v-if="isDirty" class="dirty-dot" title="有未保存的修改"></span>
       </div>
       <div class="toolbar-right">
@@ -21,7 +21,7 @@
     </div>
 
     <!-- 加载中 -->
-    <div v-if="isLoading" class="placeholder">
+    <div v-if="isFileLoading" class="placeholder">
       <div class="spinner"></div>
       <p>加载中...</p>
     </div>
@@ -52,45 +52,23 @@ export default {
   data() {
     return {
       bodyHeight: 500,
-      editorKey: 0,
       theme: 'fresh-blue',
       editorReady: false,
       currentJson: null,
-      currentFileName: '未命名',
-      isInternalLoading: false,
-      loadingPath: null
+      fileName: '未命名',
+      isReady: false  // 组件首次准备好，阻止初次渲染的 save 事件
     }
   },
 
   computed: {
+    isFileLoading() {
+      return this.$store.getters['files/isFileLoading']
+    },
     isDirty() {
       return this.$store.getters['files/currentFile']?.dirty || false
     },
-    isLoading() {
-      return this.$store.getters['files/isFileLoading']
-    },
     isSaving() {
       return this.$store.getters['files/isFileSaving']
-    }
-  },
-
-  watch: {
-    // 只在文件路径变化时加载新内容
-    '$store.state.files.currentFile': {
-      handler(newFile) {
-        if (!newFile?.content) {
-          this.editorReady = false
-          this.currentJson = null
-          return
-        }
-        // 防重复
-        if (newFile.path === this.loadingPath) return
-        this.loadingPath = newFile.path
-        
-        this.currentFileName = newFile.name.replace(/\.km$/, '')
-        this.loadContent(newFile.content)
-      },
-      immediate: true
     }
   },
 
@@ -98,6 +76,17 @@ export default {
     this.calcHeight()
     window.addEventListener('resize', this.calcHeight)
     document.addEventListener('keydown', this.onKeydown)
+
+    // 检查初始状态
+    const file = this.$store.getters['files/currentFile']
+    if (file?.content) {
+      this.applyContent(file)
+    }
+
+    // 标记组件准备好，允许处理 save 事件
+    this.$nextTick(() => {
+      this.isReady = true
+    })
   },
 
   beforeDestroy() {
@@ -106,35 +95,22 @@ export default {
   },
 
   methods: {
-    loadContent(content) {
-      if (!content) return
-
-      // 开始加载，阻止 KityMinder 的 save 事件触发循环
-      this.isInternalLoading = true
+    // 应用内容到编辑器
+    applyContent(file) {
+      if (!file?.content) return
 
       try {
-        const d = JSON.parse(content)
-        if (!d || typeof d !== 'object') {
-          this.isInternalLoading = false
-          return
-        }
+        const d = JSON.parse(file.content)
+        if (!d || typeof d !== 'object') return
         
+        this.fileName = file.name.replace(/\.km$/, '')
         if (d.theme) this.theme = d.theme
         this.currentJson = d
         this.editorReady = true
-        this.editorKey++
-        this.$nextTick(() => {
-          this.calcHeight()
-          // 等待 KityMinder 完全渲染后再允许 save
-          setTimeout(() => {
-            this.isInternalLoading = false
-            console.log('[MinderEditor] 加载完成')
-          }, 500)
-        })
+        this.calcHeight()
       } catch (e) {
         console.error('[MinderEditor] JSON解析失败:', e.message)
         this.editorReady = false
-        this.isInternalLoading = false
       }
     },
 
@@ -145,10 +121,8 @@ export default {
     },
 
     onSave() {
-      // 防止无限循环：加载中时不处理 save 事件
-      // KityMinder 会在每次渲染时自动触发 save，导致 loadContent → save → loadContent 循环
-      if (this.isInternalLoading) {
-        console.log('[MinderEditor] 内部加载中，忽略 save 事件')
+      // 组件未完全准备好时，忽略 KityMinder 的自动 save 事件
+      if (!this.isReady) {
         return
       }
       const ktm = this.$refs.ktmEditor
@@ -163,11 +137,12 @@ export default {
     onKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        this.onSave()
+        this.handleSave()
       }
     },
 
     handleSave() {
+      if (!this.isReady) return
       this.onSave()
       this.$message({ message: '保存成功', type: 'success', duration: 1500 })
     }
