@@ -33,7 +33,7 @@
 
     <!-- 脑图编辑器：editorReady 为 true 且 parsedJson 有值时才渲染 -->
     <!-- key 变化时强制重建，确保切换文件时编辑器重新初始化 -->
-    <minder-editor-comp
+    <minder-editor
       v-else
       :key="editorKey"
       :import-json="currentJson"
@@ -47,17 +47,8 @@
 </template>
 
 <script>
-import MinderEditorPlugin from 'vue-minder-editor-extended'
-
-// 取出插件内部的组件对象，局部注册，绕过双 Vue 实例问题
-const MinderEditorComp = MinderEditorPlugin.vueMinderEditorExtended || MinderEditorPlugin
-
 export default {
   name: 'MinderEditor',
-
-  components: {
-    MinderEditorComp
-  },
 
   props: {
     content:    { type: String,  default: null  },
@@ -96,13 +87,17 @@ export default {
       let parsed = null
       try {
         const d = JSON.parse(newVal)
-        if (d && d.root) {
+        // 更宽松的检查：只要是对象就可以，不一定要有 root（可能是新建的空文件）
+        if (d && typeof d === 'object') {
           parsed = d
           if (d.theme) this.theme = d.theme
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        console.error('JSON 解析失败:', e.message, '内容:', newVal.substring(0, 100))
+      }
 
       if (!parsed) {
+        console.warn('无法解析脑图内容，显示空状态')
         this.editorReady = false
         this.currentJson = null
         return
@@ -129,7 +124,10 @@ export default {
 
     // 如果挂载时 content 已经有值（比如页面刷新后恢复状态），立即初始化
     if (this.content) {
+      console.log('[MinderEditor] 挂载时 content 已存在，长度:', this.content.length)
       this._initFromContent(this.content)
+    } else {
+      console.log('[MinderEditor] 挂载时 content 为空')
     }
   },
 
@@ -142,13 +140,18 @@ export default {
     _initFromContent(val) {
       try {
         const d = JSON.parse(val)
-        if (d && d.root) {
+        if (d && typeof d === 'object') {
           if (d.theme) this.theme = d.theme
           this.currentJson = d
           this.editorReady = true
+          console.log('[MinderEditor] 内容初始化成功，root:', d.root ? '✓' : '✗')
           this.$nextTick(this.calcHeight)
+        } else {
+          console.warn('[MinderEditor] 解析结果不是对象:', typeof d)
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        console.error('[MinderEditor] JSON 解析失败:', e.message, '内容:', val.substring(0, 200))
+      }
     },
 
     calcHeight() {

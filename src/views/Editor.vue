@@ -112,6 +112,7 @@ export default {
 
     // 本地方法名改为 handleOpenFile，避免与 mapActions 的 openFile 冲突
     async handleOpenFile({ path }) {
+      console.log('[Editor] 打开文件:', path)
       if (this.isDirty) {
         try {
           await this.$confirm(
@@ -132,8 +133,11 @@ export default {
       }
       try {
         // 调用 store action（mapActions 映射的 openFile）
+        console.log('[Editor] 调用 store.openFile...')
         await this.openFile({ path })
+        console.log('[Editor] 文件打开成功，currentFile:', this.currentFile)
       } catch (err) {
+        console.error('[Editor] 打开文件失败:', err)
         this.$message.error('打开文件失败：' + err.message)
       }
     },

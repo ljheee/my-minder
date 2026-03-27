@@ -261,10 +261,19 @@ function encodeBase64(str) {
  */
 function decodeBase64(str) {
   if (!str) return ''
-  // GitHub 返回的 base64 可能包含换行符，需要先清理
-  const cleaned = str.replace(/\n/g, '')
-  const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0))
-  return new TextDecoder('utf-8').decode(bytes)
+  try {
+    // GitHub 返回的 base64 可能包含换行符和反斜杠转义，需要先清理
+    let cleaned = str.replace(/\n/g, '').replace(/\\/g, '')
+    // 补齐 base64 padding
+    while (cleaned.length % 4) {
+      cleaned += '='
+    }
+    const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0))
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch (err) {
+    console.error('[github.js] Base64 解码失败:', err.message, '原始字符串:', str.substring(0, 100))
+    return ''
+  }
 }
 
 /**

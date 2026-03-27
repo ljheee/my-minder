@@ -128,10 +128,12 @@ export default {
       const owner = rootGetters['auth/owner']
       const repo = rootGetters['auth/repoName']
 
+      console.log('[store/files] openFile 开始:', { path, owner, repo })
       commit('SET_FILE_LOADING', true)
       commit('SET_ERROR', null)
       try {
         const file = await getFileContent(owner, repo, path)
+        console.log('[store/files] 文件内容获取成功，长度:', file.content.length, '内容预览:', file.content.substring(0, 100))
         commit('SET_CURRENT_FILE', {
           path: file.path,
           name: file.name,
@@ -139,8 +141,10 @@ export default {
           sha: file.sha,
           dirty: false
         })
+        console.log('[store/files] currentFile 已更新')
         return file
       } catch (err) {
+        console.error('[store/files] 打开文件失败:', err)
         commit('SET_ERROR', `打开文件失败: ${err.message}`)
         throw err
       } finally {
