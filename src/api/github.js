@@ -3,9 +3,18 @@
  *
  * 所有操作都直接从前端调用 GitHub API，token 存在 localStorage 中
  * 文件格式：.km（JSON 格式的脑图数据）
+ *
+ * 本地调试模式：通过环境变量 VUE_APP_ENABLE_LOCAL_MODE=true 启用
+ * 启用后数据存储在浏览器 localStorage，不调用 GitHub API
  */
 
 import axios from 'axios'
+import * as localApi from './localStorage'
+
+// 是否使用本地调试模式（通过环境变量控制，不影响生产环境）
+const isLocalMode = () => {
+  return process.env.VUE_APP_ENABLE_LOCAL_MODE === 'true'
+}
 
 const BASE_URL = 'https://api.github.com'
 
@@ -53,6 +62,9 @@ export async function getUser() {
  * @returns {Promise<Array>}
  */
 export async function listRepos({ page = 1, perPage = 30, sort = 'updated' } = {}) {
+  if (isLocalMode()) {
+    return localApi.listRepos()
+  }
   const { data } = await client().get('/user/repos', {
     params: {
       page,
@@ -72,6 +84,9 @@ export async function listRepos({ page = 1, perPage = 30, sort = 'updated' } = {
  * @returns {Promise<Object>}
  */
 export async function createRepo(name, isPrivate = true) {
+  if (isLocalMode()) {
+    return localApi.createRepo(name, isPrivate)
+  }
   const { data } = await client().post('/user/repos', {
     name,
     private: isPrivate,
@@ -93,6 +108,9 @@ export async function createRepo(name, isPrivate = true) {
  * @returns {Promise<Array<{name, path, type, sha, size, download_url}>>}
  */
 export async function listContents(owner, repo, path = '') {
+  if (isLocalMode()) {
+    return localApi.listContents(owner, repo, path)
+  }
   const encodedPath = path ? encodeURIComponent(path).replace(/%2F/g, '/') : ''
   const url = `/repos/${owner}/${repo}/contents/${encodedPath}`
   const { data } = await client().get(url)
@@ -114,6 +132,9 @@ export async function listContents(owner, repo, path = '') {
  * @returns {Promise<{content: string, sha: string, name: string, path: string}>}
  */
 export async function getFileContent(owner, repo, path) {
+  if (isLocalMode()) {
+    return localApi.getFileContent(owner, repo, path)
+  }
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   const { data } = await client().get(`/repos/${owner}/${repo}/contents/${encodedPath}`)
   // GitHub 返回的 content 是 base64 编码的
@@ -138,6 +159,9 @@ export async function getFileContent(owner, repo, path) {
  * @returns {Promise<{sha: string, path: string}>}
  */
 export async function putFile(owner, repo, path, content, message, sha = null) {
+  if (isLocalMode()) {
+    return localApi.putFile(owner, repo, path, content, message, sha)
+  }
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   const body = {
     message,
@@ -163,6 +187,9 @@ export async function putFile(owner, repo, path, content, message, sha = null) {
  * @returns {Promise<void>}
  */
 export async function deleteFile(owner, repo, path, sha, message) {
+  if (isLocalMode()) {
+    return localApi.deleteFile(owner, repo, path, sha, message)
+  }
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   await client().delete(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
     data: { message, sha }
@@ -180,6 +207,9 @@ export async function deleteFile(owner, repo, path, sha, message) {
  * @returns {Promise<{sha: string, path: string}>}
  */
 export async function renameFile(owner, repo, oldPath, newPath, oldSha, content) {
+  if (isLocalMode()) {
+    return localApi.renameFile(owner, repo, oldPath, newPath, oldSha, content)
+  }
   // 1. 在新路径创建文件
   const result = await putFile(
     owner, repo, newPath, content,
@@ -201,6 +231,9 @@ export async function renameFile(owner, repo, oldPath, newPath, oldSha, content)
  * @returns {Promise<{sha: string, path: string}>}
  */
 export async function createMinderFile(owner, repo, path) {
+  if (isLocalMode()) {
+    return localApi.createMinderFile(owner, repo, path)
+  }
   const emptyMinder = JSON.stringify({
     root: {
       data: { text: '中心主题' },
@@ -222,6 +255,9 @@ export async function createMinderFile(owner, repo, path) {
  * @returns {Promise<void>}
  */
 export async function createFolder(owner, repo, folderPath) {
+  if (isLocalMode()) {
+    return localApi.createFolder(owner, repo, folderPath)
+  }
   const gitkeepPath = `${folderPath}/.gitkeep`
   await putFile(owner, repo, gitkeepPath, '', `create folder: ${folderPath}`)
 }
@@ -234,6 +270,9 @@ export async function createFolder(owner, repo, folderPath) {
  * @returns {Promise<void>}
  */
 export async function deleteFolder(owner, repo, folderPath) {
+  if (isLocalMode()) {
+    return localApi.deleteFolder(owner, repo, folderPath)
+  }
   const items = await listContents(owner, repo, folderPath)
   for (const item of items) {
     if (item.type === 'dir') {

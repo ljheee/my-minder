@@ -44,7 +44,7 @@
     </button>
 
     <div class="main-area">
-      <minder-editor :key="editorKey" />
+      <minder-editor :file-data="currentFile" />
     </div>
   </div>
 </template>
@@ -65,8 +65,7 @@ export default {
       sidebarWidth: 260,
       isResizing: false,
       resizeStartX: 0,
-      resizeStartWidth: 0,
-      editorKey: 0
+      resizeStartWidth: 0
     }
   },
 
@@ -74,14 +73,16 @@ export default {
     ...mapGetters('auth', ['user', 'isLoggedIn']),
     ...mapGetters('files', ['isDirty', 'isFileLoading', 'isFileSaving']),
 
+    currentFile() {
+      return this.$store.getters['files/currentFile']
+    },
+
     currentFilePath() {
-      return this.$store.getters['files/currentFile']?.path || ''
+      return this.currentFile?.path || ''
     },
 
     currentFileName() {
-      const cf = this.$store.getters['files/currentFile']
-      if (!cf) return '未命名'
-      return cf.name.replace(/\.km$/, '')
+      return this.currentFile?.name?.replace(/\.km$/, '') || '未命名'
     }
   },
 
@@ -121,8 +122,6 @@ export default {
       }
       try {
         await this.openFile({ path })
-        // 切换文件时，强制重新挂载 MinderEditor（通过 key 变化）
-        this.editorKey++
       } catch (err) {
         this.$message.error('打开文件失败：' + err.message)
       }
