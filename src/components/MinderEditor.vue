@@ -57,7 +57,7 @@ export default {
       editorReady: false,
       currentJson: null,
       currentFileName: '未命名',
-      // 防重复加载
+      isInternalLoading: false,
       loadingPath: null
     }
   },
@@ -109,18 +109,32 @@ export default {
     loadContent(content) {
       if (!content) return
 
+      // 开始加载，阻止 KityMinder 的 save 事件触发循环
+      this.isInternalLoading = true
+
       try {
         const d = JSON.parse(content)
-        if (!d || typeof d !== 'object') return
+        if (!d || typeof d !== 'object') {
+          this.isInternalLoading = false
+          return
+        }
         
         if (d.theme) this.theme = d.theme
         this.currentJson = d
         this.editorReady = true
         this.editorKey++
-        this.$nextTick(() => this.calcHeight())
+        this.$nextTick(() => {
+          this.calcHeight()
+          // 等待 KityMinder 完全渲染后再允许 save
+          setTimeout(() => {
+            this.isInternalLoading = false
+            console.log('[MinderEditor] 加载完成')
+          }, 500)
+        })
       } catch (e) {
         console.error('[MinderEditor] JSON解析失败:', e.message)
         this.editorReady = false
+        this.isInternalLoading = false
       }
     },
 
@@ -131,6 +145,12 @@ export default {
     },
 
     onSave() {
+      // 防止无限循环：加载中时不处理 save 事件
+      // KityMinder 会在每次渲染时自动触发 save，导致 loadContent → save → loadContent 循环
+      if (this.isInternalLoading) {
+        console.log('[MinderEditor] 内部加载中，忽略 save 事件')
+        return
+      }
       const ktm = this.$refs.ktmEditor
       if (!ktm) return
       const data = ktm.exportJson ? ktm.exportJson() : this.currentJson
