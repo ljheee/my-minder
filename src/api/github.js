@@ -16,10 +16,7 @@ const createClient = (token) => {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      // 禁用浏览器缓存，避免 GitHub API 返回 304（body 为空导致解析失败）
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache'
+      'X-GitHub-Api-Version': '2022-11-28'
     }
   })
 }
@@ -119,10 +116,6 @@ export async function listContents(owner, repo, path = '') {
 export async function getFileContent(owner, repo, path) {
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   const { data } = await client().get(`/repos/${owner}/${repo}/contents/${encodedPath}`)
-  // 304 缓存命中时 data 可能为空或 data.content 为 undefined，加防御
-  if (!data || !data.content) {
-    throw new Error('文件内容为空（可能是缓存问题），请重试')
-  }
   // GitHub 返回的 content 是 base64 编码的
   const content = decodeBase64(data.content)
   return {

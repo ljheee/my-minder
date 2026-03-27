@@ -65,13 +65,21 @@ export default {
 
   computed: {
     parsedJson() {
-      if (!this.content) return null
+      if (!this.content) {
+        console.warn('[MinderEditor] parsedJson: content is', this.content)
+        return null
+      }
       try {
         const d = JSON.parse(this.content)
-        // 确保有 root 节点
-        if (!d.root) return null
+        if (!d.root) {
+          console.warn('[MinderEditor] parsedJson: no root node, d=', d)
+          return null
+        }
+        console.log('[MinderEditor] parsedJson OK, root.data.text=', d.root.data && d.root.data.text)
         return d
       } catch (e) {
+        console.error('[MinderEditor] parsedJson JSON.parse FAILED:', e.message)
+        console.error('[MinderEditor] raw content (first 200):', String(this.content).slice(0, 200))
         return null
       }
     }
@@ -80,6 +88,7 @@ export default {
   watch: {
     // 每次 content 变化（切换文件）都重建编辑器
     content(newVal, oldVal) {
+      console.log('[MinderEditor] watch.content changed:', { oldLen: oldVal && oldVal.length, newLen: newVal && newVal.length })
       if (newVal !== oldVal) {
         if (newVal) {
           try {
@@ -90,6 +99,9 @@ export default {
         this.editorKey++
         this.$nextTick(this.calcHeight)
       }
+    },
+    isLoading(val) {
+      console.log('[MinderEditor] isLoading changed to:', val, '| content:', this.content && this.content.length, '| parsedJson:', !!this.parsedJson)
     }
   },
 
