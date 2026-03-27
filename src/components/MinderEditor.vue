@@ -20,20 +20,23 @@
       </div>
     </div>
 
-    <!-- 空状态 -->
+    <!-- 加载中 -->
     <div v-if="isLoading" class="placeholder">
       <div class="spinner"></div>
       <p>加载中...</p>
     </div>
-    <div v-else-if="!parsedJson" class="placeholder">
+
+    <!-- 空状态：没有文件，且不在加载中，且编辑器未就绪 -->
+    <div v-else-if="!editorReady" class="placeholder">
       <p style="color:#aaa">← 从左侧选择或新建一个脑图文件</p>
     </div>
 
-    <!-- 脑图编辑器：key 变化时强制重建，height 动态计算 -->
+    <!-- 脑图编辑器：editorReady 为 true 且 parsedJson 有值时才渲染 -->
+    <!-- key 变化时强制重建，确保切换文件时编辑器重新初始化 -->
     <minder-editor
       v-else
       :key="editorKey"
-      :import-json="parsedJson"
+      :import-json="currentJson"
       :height="bodyHeight"
       :theme="theme"
       style="flex:1;overflow:hidden;"
@@ -59,49 +62,54 @@ export default {
     return {
       bodyHeight: 500,
       editorKey: 0,
-      theme: 'fresh-blue'
-    }
-  },
-
-  computed: {
-    parsedJson() {
-      if (!this.content) {
-        console.warn('[MinderEditor] parsedJson: content is', this.content)
-        return null
-      }
-      try {
-        const d = JSON.parse(this.content)
-        if (!d.root) {
-          console.warn('[MinderEditor] parsedJson: no root node, d=', d)
-          return null
-        }
-        console.log('[MinderEditor] parsedJson OK, root.data.text=', d.root.data && d.root.data.text)
-        return d
-      } catch (e) {
-        console.error('[MinderEditor] parsedJson JSON.parse FAILED:', e.message)
-        console.error('[MinderEditor] raw content (first 200):', String(this.content).slice(0, 200))
-        return null
-      }
+      theme: 'fresh-blue',
+      // editorReady: 控制编辑器是否渲染
+      // 用 data 而非 computed，避免 content 瞬间变 null 时闪烁空状态
+      editorReady: false,
+      // currentJson: 传给 minder-editor 的数据，在确认 content 就绪后才更新
+      currentJson: null
     }
   },
 
   watch: {
-    // 每次 content 变化（切换文件）都重建编辑器
+    // content 变化时，等下一帧再更新编辑器，确保 parsedJson 已经稳定
     content(newVal, oldVal) {
-      console.log('[MinderEditor] watch.content changed:', { oldLen: oldVal && oldVal.length, newLen: newVal && newVal.length })
-      if (newVal !== oldVal) {
-        if (newVal) {
-          try {
-            const d = JSON.parse(newVal)
-            if (d.theme) this.theme = d.theme
-          } catch (e) { /* ignore */ }
-        }
-        this.editorKey++
-        this.$nextTick(this.calcHeight)
+      if (newVal === oldVal) return
+
+      if (!newVal) {
+        // 文件被关闭
+        this.editorReady = false
+        this.currentJson = null
+        return
       }
-    },
-    isLoading(val) {
-      console.log('[MinderEditor] isLoading changed to:', val, '| content:', this.content && this.content.length, '| parsedJson:', !!this.parsedJson)
+
+      // 解析新内容
+      let parsed = null
+      try {
+        const d = JSON.parse(newVal)
+        if (d && d.root) {
+          parsed = d
+          if (d.theme) this.theme = d.theme
+        }
+      } catch (e) { /* ignore */ }
+
+      if (!parsed) {
+        this.editorReady = false
+        this.currentJson = null
+        return
+      }
+
+      // 先隐藏编辑器（销毁旧实例），下一帧再用新数据重建
+      // 这样 minder-editor 的 mounted 读到的 importJson 一定是新值
+      this.editorReady = false
+      this.currentJson = null
+
+      this.$nextTick(() => {
+        this.currentJson = parsed
+        this.editorKey++
+        this.editorReady = true
+        this.$nextTick(this.calcHeight)
+      })
     }
   },
 
@@ -109,6 +117,11 @@ export default {
     this.calcHeight()
     window.addEventListener('resize', this.calcHeight)
     document.addEventListener('keydown', this.onKeydown)
+
+    // 如果挂载时 content 已经有值（比如页面刷新后恢复状态），立即初始化
+    if (this.content) {
+      this._initFromContent(this.content)
+    }
   },
 
   beforeDestroy() {
@@ -117,8 +130,19 @@ export default {
   },
 
   methods: {
+    _initFromContent(val) {
+      try {
+        const d = JSON.parse(val)
+        if (d && d.root) {
+          if (d.theme) this.theme = d.theme
+          this.currentJson = d
+          this.editorReady = true
+          this.$nextTick(this.calcHeight)
+        }
+      } catch (e) { /* ignore */ }
+    },
+
     calcHeight() {
-      // 总高度 - 工具栏高度(44px)
       const total = this.$el ? this.$el.clientHeight : window.innerHeight
       this.bodyHeight = Math.max(300, total - 44)
     },
@@ -134,7 +158,6 @@ export default {
     onKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        // 触发编辑器内置保存（会 emit save 事件）
         if (window.minder) {
           const data = window.minder.exportJson()
           this.onSave(data)
