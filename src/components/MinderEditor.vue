@@ -51,7 +51,6 @@ export default {
   name: 'MinderEditor',
 
   props: {
-    content:    { type: String,  default: null  },
     fileName:   { type: String,  default: '未命名' },
     isDirty:    { type: Boolean, default: false },
     isLoading:  { type: Boolean, default: false },
@@ -63,28 +62,8 @@ export default {
       bodyHeight: 500,
       editorKey: 0,
       theme: 'fresh-blue',
-      // editorReady: 控制编辑器是否渲染
-      // 用 data 而非 computed，避免 content 瞬间变 null 时闪烁空状态
       editorReady: false,
-      // currentJson: 传给 minder-editor 的数据，在确认 content 就绪后才更新
       currentJson: null
-    }
-  },
-
-  watch: {
-    // 专门追踪 props.content 的变化
-    content: {
-      handler(newVal, oldVal) {
-        console.log('[MinderEditor props.content watch] newVal:', newVal ? `'${newVal.substring(0, 60)}...'` : null, 'oldVal:', oldVal ? '...' : null)
-        
-        if (newVal === oldVal) {
-          console.log('[MinderEditor props.content watch] 值相同，跳过')
-          return
-        }
-        
-        this.processContent(newVal)
-      },
-      immediate: true  // 组件创建时立即执行一次
     }
   },
 
@@ -93,62 +72,68 @@ export default {
     window.addEventListener('resize', this.calcHeight)
     document.addEventListener('keydown', this.onKeydown)
 
-    // 如果挂载时 content 已经有值，立即初始化
-    if (this.content) {
-      console.log('[MinderEditor] 挂载时 content 已存在，长度:', this.content.length)
-      this.processContent(this.content)
-    } else {
-      console.log('[MinderEditor] 挂载时 content 为空，等待变化...')
-    }
-
-    // 额外添加 $watch 监听 content 变化（作为备用）
-    this.$watch('content', (newVal) => {
-      console.log('[MinderEditor $watch] content 变化:', newVal ? '有新值' : 'null')
+    // 直接监听 store 的 currentFile 变化，不依赖 props
+    this.unsubscribe = this.$store.subscribe((mutation, state) => {
+      if (mutation.type === 'files/SET_CURRENT_FILE') {
+        console.log('[MinderEditor store.subscribe] SET_CURRENT_FILE, file:', mutation.payload?.path, 'content:', mutation.payload?.content?.substring(0, 50))
+        if (mutation.payload?.content) {
+          this.loadContent(mutation.payload.content)
+        } else {
+          this.editorReady = false
+          this.currentJson = null
+        }
+      }
     })
+
+    // 检查初始状态
+    const initial = this.$store.getters['files/currentFile']
+    if (initial?.content) {
+      console.log('[MinderEditor] 初始 content 存在，长度:', initial.content.length)
+      this.loadContent(initial.content)
+    } else {
+      console.log('[MinderEditor] 初始 content 为空')
+    }
   },
 
   beforeDestroy() {
     window.removeEventListener('resize', this.calcHeight)
     document.removeEventListener('keydown', this.onKeydown)
+    if (this.unsubscribe) {
+      this.unsubscribe()
+    }
   },
 
   methods: {
-    // 处理 content 的核心方法
-    processContent(newVal) {
-      if (!newVal) {
-        console.log('[MinderEditor processContent] content 为空')
+    // 加载内容到编辑器
+    loadContent(content) {
+      if (!content) {
         this.editorReady = false
         this.currentJson = null
         return
       }
 
-      // 解析新内容
       let parsed = null
       try {
-        const d = JSON.parse(newVal)
-        // 更宽松的检查：只要是对象就可以，不一定要有 root
+        const d = JSON.parse(content)
         if (d && typeof d === 'object') {
           parsed = d
           if (d.theme) this.theme = d.theme
-          console.log('[MinderEditor processContent] JSON 解析成功，root:', d.root ? '✓' : '✗')
-        } else {
-          console.warn('[MinderEditor processContent] 解析结果不是对象:', typeof d)
+          console.log('[MinderEditor loadContent] JSON 解析成功，root:', d.root ? '✓' : '✗')
         }
       } catch (e) {
-        console.error('[MinderEditor processContent] JSON 解析失败:', e.message, '内容:', newVal.substring(0, 100))
+        console.error('[MinderEditor loadContent] JSON 解析失败:', e.message)
       }
 
       if (!parsed) {
-        console.warn('[MinderEditor processContent] 无法解析脑图内容，显示空状态')
+        console.warn('[MinderEditor loadContent] 无法解析，显示空状态')
         this.editorReady = false
         this.currentJson = null
         return
       }
 
-      // 先隐藏编辑器（销毁旧实例），下一帧再用新数据重建
+      // 重建编辑器
       this.editorReady = false
       this.currentJson = null
-
       this.$nextTick(() => {
         this.currentJson = parsed
         this.editorKey++

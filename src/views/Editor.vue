@@ -44,9 +44,8 @@
     </button>
 
     <div class="main-area">
-      <!-- 直接从 store 获取 content，避免 computed 缓存问题 -->
+      <!-- MinderEditor 直接监听 store，这里不需要传 content -->
       <minder-editor
-        :content="$store.getters['files/currentFile']?.content || null"
         :file-name="currentFileName"
         :is-dirty="isDirty"
         :is-loading="isFileLoading"
@@ -83,11 +82,6 @@ export default {
     ...mapGetters('auth', ['user', 'isLoggedIn']),
     ...mapGetters('files', ['isDirty', 'isFileLoading', 'isFileSaving']),
 
-    currentFileContent() {
-      const cf = this.$store.getters['files/currentFile']
-      return cf?.content || null
-    },
-
     currentFilePath() {
       return this.$store.getters['files/currentFile']?.path || null
     },
@@ -115,7 +109,6 @@ export default {
 
     // 本地方法名改为 handleOpenFile，避免与 mapActions 的 openFile 冲突
     async handleOpenFile({ path }) {
-      console.log('[Editor] 打开文件:', path)
       if (this.isDirty) {
         try {
           await this.$confirm(
@@ -135,17 +128,8 @@ export default {
         }
       }
       try {
-        // 调用 store action（mapActions 映射的 openFile）
-        console.log('[Editor] 调用 store.openFile...')
         await this.openFile({ path })
-        console.log('[Editor] 文件打开成功')
-        // 强制触发 computed 更新
-        this.$forceUpdate()
-        // 等待 nextTick 后再次检查
-        await this.$nextTick()
-        console.log('[Editor] after nextTick, currentFileContent:', this.currentFileContent ? this.currentFileContent.substring(0, 50) : 'null')
       } catch (err) {
-        console.error('[Editor] 打开文件失败:', err)
         this.$message.error('打开文件失败：' + err.message)
       }
     },
