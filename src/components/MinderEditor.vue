@@ -33,7 +33,7 @@
 
     <!-- 脑图编辑器：editorReady 为 true 且 parsedJson 有值时才渲染 -->
     <!-- key 变化时强制重建，确保切换文件时编辑器重新初始化 -->
-    <minder-editor
+    <minder-editor-comp
       v-else
       :key="editorKey"
       :import-json="currentJson"
@@ -47,8 +47,17 @@
 </template>
 
 <script>
+import MinderEditorPlugin from 'vue-minder-editor-extended'
+
+// 取出插件内部的组件对象，局部注册，绕过双 Vue 实例问题
+const MinderEditorComp = MinderEditorPlugin.vueMinderEditorExtended || MinderEditorPlugin
+
 export default {
   name: 'MinderEditor',
+
+  components: {
+    MinderEditorComp
+  },
 
   props: {
     content:    { type: String,  default: null  },
