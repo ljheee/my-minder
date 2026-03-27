@@ -44,16 +44,7 @@
     </button>
 
     <div class="main-area">
-      <!-- MinderEditor 直接监听 store，这里不需要传 content -->
-      <minder-editor
-        :file-name="currentFileName"
-        :is-dirty="isDirty"
-        :is-loading="isFileLoading"
-        :is-saving="isFileSaving"
-        @change="onEditorChange"
-        @save="handleSave"
-        @error="onEditorError"
-      />
+      <minder-editor />
     </div>
   </div>
 </template>

@@ -4,7 +4,7 @@
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar">
       <div class="toolbar-left">
-        <span class="file-name">{{ fileName }}</span>
+        <span class="file-name">{{ currentFileName }}</span>
         <span v-if="isDirty" class="dirty-dot" title="有未保存的修改"></span>
       </div>
       <div class="toolbar-right">
@@ -12,7 +12,7 @@
           class="save-btn"
           :class="{ active: isDirty }"
           :disabled="isSaving || !isDirty"
-          @click="$emit('save')"
+          @click="handleSave"
         >
           <span v-if="isSaving" class="btn-spinner"></span>
           {{ isSaving ? '保存中...' : (isDirty ? '⌘S 保存' : '已保存') }}
@@ -26,16 +26,15 @@
       <p>加载中...</p>
     </div>
 
-    <!-- 空状态：没有文件，且不在加载中，且编辑器未就绪 -->
+    <!-- 空状态 -->
     <div v-else-if="!editorReady" class="placeholder">
       <p style="color:#aaa">← 从左侧选择或新建一个脑图文件</p>
     </div>
 
-    <!-- 脑图编辑器：editorReady 为 true 且 parsedJson 有值时才渲染 -->
-    <!-- key 变化时强制重建，确保切换文件时编辑器重新初始化 -->
+    <!-- 脑图编辑器 -->
     <minder-editor
       v-else
-      :key="editorKey"
+      ref="ktmEditor"
       :import-json="currentJson"
       :height="bodyHeight"
       :theme="theme"
@@ -50,13 +49,6 @@
 export default {
   name: 'MinderEditor',
 
-  props: {
-    fileName:   { type: String,  default: '未命名' },
-    isDirty:    { type: Boolean, default: false },
-    isLoading:  { type: Boolean, default: false },
-    isSaving:   { type: Boolean, default: false }
-  },
-
   data() {
     return {
       bodyHeight: 500,
@@ -64,7 +56,41 @@ export default {
       theme: 'fresh-blue',
       editorReady: false,
       currentJson: null,
-      lastLoadedPath: null  // 防止重复加载
+      currentFileName: '未命名',
+      // 防重复加载
+      loadingPath: null
+    }
+  },
+
+  computed: {
+    isDirty() {
+      return this.$store.getters['files/currentFile']?.dirty || false
+    },
+    isLoading() {
+      return this.$store.getters['files/isFileLoading']
+    },
+    isSaving() {
+      return this.$store.getters['files/isFileSaving']
+    }
+  },
+
+  watch: {
+    // 只在文件路径变化时加载新内容
+    '$store.state.files.currentFile': {
+      handler(newFile) {
+        if (!newFile?.content) {
+          this.editorReady = false
+          this.currentJson = null
+          return
+        }
+        // 防重复
+        if (newFile.path === this.loadingPath) return
+        this.loadingPath = newFile.path
+        
+        this.currentFileName = newFile.name.replace(/\.km$/, '')
+        this.loadContent(newFile.content)
+      },
+      immediate: true
     }
   },
 
@@ -72,99 +98,58 @@ export default {
     this.calcHeight()
     window.addEventListener('resize', this.calcHeight)
     document.addEventListener('keydown', this.onKeydown)
-
-    // 直接监听 store 的 currentFile 变化，不依赖 props
-    this.unsubscribe = this.$store.subscribe((mutation) => {
-      if (mutation.type === 'files/SET_CURRENT_FILE') {
-        const file = mutation.payload
-        console.log('[MinderEditor store.subscribe] SET_CURRENT_FILE, file:', file?.path)
-        // 防止重复加载同一个文件
-        if (file?.content && file.path !== this.lastLoadedPath) {
-          this.lastLoadedPath = file.path
-          this.loadContent(file.content)
-        }
-      }
-    })
-
-    // 检查初始状态
-    const initial = this.$store.getters['files/currentFile']
-    if (initial?.content) {
-      console.log('[MinderEditor] 初始 content 存在，长度:', initial.content.length)
-      this.lastLoadedPath = initial.path
-      this.loadContent(initial.content)
-    } else {
-      console.log('[MinderEditor] 初始 content 为空')
-    }
   },
 
   beforeDestroy() {
     window.removeEventListener('resize', this.calcHeight)
     document.removeEventListener('keydown', this.onKeydown)
-    if (this.unsubscribe) {
-      this.unsubscribe()
-    }
   },
 
   methods: {
-    // 加载内容到编辑器
     loadContent(content) {
-      if (!content) {
-        this.editorReady = false
-        this.currentJson = null
-        return
-      }
+      if (!content) return
 
-      let parsed = null
       try {
         const d = JSON.parse(content)
-        if (d && typeof d === 'object') {
-          parsed = d
-          if (d.theme) this.theme = d.theme
-          console.log('[MinderEditor loadContent] JSON 解析成功，root:', d.root ? '✓' : '✗')
-        }
-      } catch (e) {
-        console.error('[MinderEditor loadContent] JSON 解析失败:', e.message)
-      }
-
-      if (!parsed) {
-        console.warn('[MinderEditor loadContent] 无法解析，显示空状态')
-        this.editorReady = false
-        this.currentJson = null
-        return
-      }
-
-      // 重建编辑器
-      this.editorReady = false
-      this.currentJson = null
-      this.$nextTick(() => {
-        this.currentJson = parsed
-        this.editorKey++
+        if (!d || typeof d !== 'object') return
+        
+        if (d.theme) this.theme = d.theme
+        this.currentJson = d
         this.editorReady = true
-        this.$nextTick(this.calcHeight)
-      })
+        this.editorKey++
+        this.$nextTick(() => this.calcHeight())
+      } catch (e) {
+        console.error('[MinderEditor] JSON解析失败:', e.message)
+        this.editorReady = false
+      }
     },
 
     calcHeight() {
-      const total = this.$el ? this.$el.clientHeight : window.innerHeight
-      this.bodyHeight = Math.max(300, total - 44)
+      if (this.$el) {
+        this.bodyHeight = Math.max(300, this.$el.clientHeight - 44)
+      }
     },
 
-    // 编辑器内置保存按钮触发，data 是 exportJson() 的 Object
-    onSave(data) {
+    onSave() {
+      const ktm = this.$refs.ktmEditor
+      if (!ktm) return
+      const data = ktm.exportJson ? ktm.exportJson() : this.currentJson
       if (!data) return
       const content = JSON.stringify(data, null, 2)
-      this.$emit('change', content)
-      this.$nextTick(() => this.$emit('save'))
+      this.$store.dispatch('files/updateContent', content)
+      this.$nextTick(() => this.$store.dispatch('files/saveCurrentFile'))
     },
 
     onKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        if (window.minder) {
-          const data = window.minder.exportJson()
-          this.onSave(data)
-        }
+        this.onSave()
       }
+    },
+
+    handleSave() {
+      this.onSave()
+      this.$message({ message: '保存成功', type: 'success', duration: 1500 })
     }
   }
 }
