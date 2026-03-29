@@ -19,17 +19,20 @@
     </div>
 
     <!-- 脑图编辑器
-         key 绑定文件路径：切换文件时销毁重建，import-json 会随新实例自动传入，无需手动 importJson -->
+         v-if：无文件时不创建 minder 实例，避免多实例并存导致 window.minder 被空实例覆盖
+         key 绑定文件路径：切换文件时销毁重建
+         @hook:mounted：库组件 mounted 后更新 minderInstance -->
     <minder-editor
-      v-show="hasContent"
-      :key="fileData && fileData.path || 'empty'"
+      v-if="hasContent"
+      :key="fileData.path"
       :import-json="jsonData"
       :height="height"
       style="flex:1;overflow:hidden;"
+      @hook:mounted="onMinderReady"
     >
       <!-- 将附件工具栏注入到编辑菜单插槽（edit-del 之后） -->
       <template slot="edit-menu">
-        <attachment-toolbar v-if="hasContent" />
+        <attachment-toolbar v-if="minderInstance" :minder-instance="minderInstance" />
       </template>
     </minder-editor>
   </div>
@@ -53,7 +56,8 @@ export default {
 
   data() {
     return {
-      height: 600
+      height: 600,
+      minderInstance: null  // 当前活跃的 minder 实例，传给 AttachmentToolbar
     }
   },
 
@@ -83,6 +87,12 @@ export default {
     }
   },
 
+  watch: {
+    hasContent(val) {
+      if (!val) this.minderInstance = null
+    }
+  },
+
   mounted() {
     this.calcHeight()
     window.addEventListener('resize', this.calcHeight)
@@ -93,6 +103,10 @@ export default {
   },
 
   methods: {
+    // minder-editor 库组件 mounted 后触发（@hook:mounted），此时 window.minder 已赋值
+    onMinderReady() {
+      this.minderInstance = window.minder
+    },
     calcHeight() {
       if (this.$el) this.height = Math.max(400, this.$el.clientHeight - 44)
     },

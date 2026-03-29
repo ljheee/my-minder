@@ -197,6 +197,14 @@ const URL_REGEX = /^(?!mailto:)(?:(?:http|https|ftp):\/\/)(?:\S+(?::\S*)?@)?(?:(
 export default {
   name: 'AttachmentToolbar',
 
+  props: {
+    // 由父组件传入当前活跃的 minder 实例，避免依赖 window.minder（可能指向旧实例）
+    minderInstance: {
+      type: Object,
+      default: null
+    }
+  },
+
   data() {
     return {
       // 操作时锁定的目标节点（弹窗打开时记录，防止弹窗抢焦点后 selection 丢失）
@@ -228,7 +236,8 @@ export default {
 
   computed: {
     minder() {
-      return window.minder
+      // 优先使用父组件传入的实例，如果没有则回退到 window.minder
+      return this.minderInstance || window.minder
     },
     selectedNode() {
       return this.minder?.getSelectedNode()
