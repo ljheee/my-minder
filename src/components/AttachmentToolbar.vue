@@ -163,30 +163,29 @@
       </div>
     </el-dialog>
 
-    <!-- 备注弹窗 -->
-    <el-dialog
-      title="备注"
-      :visible.sync="noteDialogVisible"
-      width="500px"
-      append-to-body
-      custom-class="attachment-dialog"
-    >
-      <form class="attachment-form">
-        <div class="form-group">
-          <label>备注内容：</label>
-          <textarea
-            class="form-control textarea"
-            v-model="noteContent"
-            rows="6"
-            placeholder="请输入备注内容..."
-          ></textarea>
+    <!-- 备注侧边面板（fixed 定位，从右侧滑入） -->
+    <transition name="note-panel">
+      <div v-if="noteDialogVisible" class="note-side-overlay" @click.self="noteDialogVisible = false">
+        <div class="note-panel-inner">
+          <div class="note-panel-header">
+            <span class="note-panel-title">备注</span>
+            <button class="note-panel-close" @click="noteDialogVisible = false">×</button>
+          </div>
+          <div class="note-panel-body">
+            <textarea
+              ref="noteTextarea"
+              class="note-panel-textarea"
+              v-model="noteContent"
+              placeholder="请输入备注内容..."
+            ></textarea>
+          </div>
+          <div class="note-panel-footer">
+            <el-button @click="noteDialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="applyNote">保存</el-button>
+          </div>
         </div>
-      </form>
-      <div slot="footer" class="dialog-footer">
-        <el-button @click="noteDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyNote">确定</el-button>
       </div>
-    </el-dialog>
+    </transition>
 
     <!-- 备注预览 tooltip（hover 备注图标时显示） -->
     <div v-if="noteTooltipVisible" class="note-tooltip">
@@ -487,6 +486,10 @@ export default {
       this.targetNode = this.minder.getSelectedNode()
       this.noteContent = this.targetNode.getData('note') || ''
       this.noteDialogVisible = true
+      // 面板打开后聚焦 textarea
+      this.$nextTick(() => {
+        if (this.$refs.noteTextarea) this.$refs.noteTextarea.focus()
+      })
     },
 
     applyNote() {
@@ -498,13 +501,16 @@ export default {
       // 恢复节点选中并确保 minder 获得焦点
       this.restoreFocusAndSelect()
 
-      // 使用 execCommand 触发完整的渲染流程（包括 contentchange 事件和图标渲染）
-      // 包裹 try/catch：库内部在首次渲染时可能抛出 HyperLink.fill 错误，但数据已写入，重试一次即可正常渲染
-      try {
-        this.minder.execCommand('note', this.noteContent)
-      } catch (e) {
-        // 首次渲染失败，重试一次（此时 renderer 已初始化）
-        try { this.minder.execCommand('note', this.noteContent) } catch (_) { /* 重试仍失败则忽略 */ }
+      // 直接操作节点数据并触发渲染，避免 execCommand 在弹窗关闭时序下的渲染问题
+      const node = this.targetNode
+      if (!node) return
+      node.setData('note', this.noteContent)
+      if (node.attached) {
+        node.render()
+        this.minder.layout(300)
+        // 触发 contentchange 让历史记录和保存状态更新
+        this.minder._firePharse({ type: 'contentchange' })
+        this.minder._interactChange()
       }
 
       this.noteDialogVisible = false
@@ -749,7 +755,138 @@ export default {
   text-align: right;
 }
 
-/* 备注预览 tooltip */
+/* ===== 备注侧边面板 ===== */
+
+/* 半透明遮罩层（点击关闭） */
+.note-side-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* 面板主体：从右侧滑入 */
+.note-panel-inner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+}
+
+/* 面板头部 */
+.note-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.note-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.note-panel-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  line-height: 1;
+  padding: 0;
+}
+
+.note-panel-close:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+/* 面板内容区 */
+.note-panel-body {
+  flex: 1;
+  padding: 16px 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.note-panel-textarea {
+  flex: 1;
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.note-panel-textarea:focus {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
+}
+
+/* 面板底部按钮 */
+.note-panel-footer {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 滑入/滑出动画 */
+.note-panel-enter-active,
+.note-panel-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.note-panel-enter-active .note-panel-inner,
+.note-panel-leave-active .note-panel-inner {
+  transition: transform 0.25s ease;
+}
+
+.note-panel-enter .note-side-overlay,
+.note-panel-leave-to .note-side-overlay {
+  opacity: 0;
+}
+
+.note-panel-enter .note-panel-inner,
+.note-panel-leave-to .note-panel-inner {
+  transform: translateX(100%);
+}
+
+.note-panel-enter-to .note-panel-inner,
+.note-panel-leave .note-panel-inner {
+  transform: translateX(0);
+}
+
+.note-panel-enter,
+.note-panel-leave-to {
+  opacity: 0;
+}
+
+/* ===== 备注预览 tooltip ===== */
 .note-tooltip {
   position: fixed;
   z-index: 9999;
@@ -757,10 +894,10 @@ export default {
   border: 1px solid #ffe58f;
   border-radius: 4px;
   padding: 8px 12px;
-  max-width: 300px;
-  max-height: 200px;
+  max-width: 280px;
+  max-height: 160px;
   overflow-y: auto;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   pointer-events: none;
   bottom: 60px;
   left: 50%;
