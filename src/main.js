@@ -32,6 +32,17 @@ window.addEventListener('error', (event) => {
   }
 })
 
+// 屏蔽 vue-router 3.x 路由守卫重定向时的 unhandledrejection 噪音
+// NavigationRedirected / NavigationDuplicated / NavigationCancelled 均属正常行为
+const IGNORED_NAV_ERRORS = ['NavigationRedirected', 'NavigationDuplicated', 'NavigationCancelled']
+window.addEventListener('unhandledrejection', (event) => {
+  const err = event.reason
+  if (err && err.name && IGNORED_NAV_ERRORS.includes(err.name)) {
+    event.stopImmediatePropagation()
+    event.preventDefault()
+  }
+})
+
 Vue.config.productionTip = false
 
 new Vue({

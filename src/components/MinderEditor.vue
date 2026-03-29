@@ -28,6 +28,7 @@
       :import-json="jsonData"
       :height="height"
       :disabled="isSaving"
+      :priorities="['P0','P1','P2','P3','P4','P5','P6','P7','P8','P9','P10']"
       style="flex:1;overflow:hidden;"
       @hook:mounted="onMinderReady"
       @save="onLibSave"
@@ -228,10 +229,113 @@ export default {
 }
 </style>
 
-<!-- 非 scoped：覆盖库的样式，确保附件工具栏下拉菜单不被裁剪 -->
+<!-- 非 scoped：覆盖库的样式 -->
 <style>
+/* 附件工具栏下拉菜单不被裁剪 */
 .menu-container > .attachment-group {
   overflow: visible !important;
   width: auto !important;
+}
+
+/* 优先级区域父容器：允许高度自动扩展，不被裁剪 */
+.mind-tab-panel .menu-container > div.sequence-group {
+  overflow: visible !important;
+}
+
+/* 优先级区域：两行布局，两行左对齐
+   第一行：× P0 P1 P2 P3 P4（6个，宽度 = 22 + 5×26 = 152px）
+   第二行：P5 P6 P7 P8 P9（5个）
+   容器宽度设 152px，P5(btn_6) 自然换行，两行左对齐
+*/
+.mind-tab-panel .menu-container .sequence-group {
+  max-width: none !important;
+  width: 152px !important;
+  flex-wrap: wrap !important;
+  align-content: flex-start !important;
+}
+
+/* P5：深紫红 */
+.priority-btn_5[data-v-c474c6dc],
+.sequence-group .priority-btn_5 {
+  background-color: #A464FF !important;
+  border-bottom: 3px solid #4720C4 !important;
+}
+.priority-btn_5[data-v-c474c6dc]:hover,
+.sequence-group .priority-btn_5:hover {
+  background-color: #A464FF !important;
+  border-bottom: 3px solid #4720C4 !important;
+  color: white !important;
+}
+
+/* P6：青色 */
+.sequence-group .priority-btn_6 {
+  background-color: #00BCD4 !important;
+  border-bottom: 3px solid #00838F !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_6:hover {
+  background-color: #00BCD4 !important;
+  border-bottom: 3px solid #00838F !important;
+  color: white !important;
+}
+
+/* P7：粉红 */
+.sequence-group .priority-btn_7 {
+  background-color: #E91E8C !important;
+  border-bottom: 3px solid #9C1060 !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_7:hover {
+  background-color: #E91E8C !important;
+  border-bottom: 3px solid #9C1060 !important;
+  color: white !important;
+}
+
+/* P8：棕色 */
+.sequence-group .priority-btn_8 {
+  background-color: #795548 !important;
+  border-bottom: 3px solid #4E342E !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_8:hover {
+  background-color: #795548 !important;
+  border-bottom: 3px solid #4E342E !important;
+  color: white !important;
+}
+
+/* P9（index=9，btn_9）：深灰 */
+.sequence-group .priority-btn_9 {
+  background-color: #607D8B !important;
+  border-bottom: 3px solid #37474F !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_9:hover {
+  background-color: #607D8B !important;
+  border-bottom: 3px solid #37474F !important;
+  color: white !important;
+}
+
+/* P9 via priorities 数组时 execCommand 传 index+1=10，对应 btn_10：橙红 */
+.sequence-group .priority-btn_10 {
+  background-color: #FF6B35 !important;
+  border-bottom: 3px solid #C44B1A !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_10:hover {
+  background-color: #FF6B35 !important;
+  border-bottom: 3px solid #C44B1A !important;
+  color: white !important;
+}
+
+/* P10：index=10，btn_11：深蓝紫 */
+.sequence-group .priority-btn_11 {
+  background-color: #5C6BC0 !important;
+  border-bottom: 3px solid #3949AB !important;
+  color: white !important;
+}
+.sequence-group .priority-btn_11:hover {
+  background-color: #5C6BC0 !important;
+  border-bottom: 3px solid #3949AB !important;
+  color: white !important;
 }
 </style>
