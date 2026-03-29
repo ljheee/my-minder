@@ -364,7 +364,11 @@ export default {
         if (node) {
           this.targetNode = node
           this.noteContent = node.getData('note') || ''
+          this.originalNote = this.noteContent  // 记录原始内容，确保 noteChanged 计算正确
           this.noteDialogVisible = true
+          this.$nextTick(() => {
+            if (this.$refs.noteTextarea) this.$refs.noteTextarea.focus()
+          })
         }
       }
       this._onShowNoteRequest = (e) => {
@@ -406,6 +410,53 @@ export default {
       minder.on('editnoterequest', this._onEditNoteRequest)
       minder.on('shownoterequest', this._onShowNoteRequest)
       minder.on('hidenoterequest', this._onHideNoteRequest)
+
+      // DOM 级别 fallback：直接在 SVG note 图标上绑定 mouseenter/mouseleave
+      // 解决 kity 事件系统在某些环境下不触发 shownoterequest 的问题
+      this._bindDomNoteIcons()
+      this._onLayoutDone = () => { this._bindDomNoteIcons() }
+      minder.on('layoutallfinish layout', this._onLayoutDone)
+    },
+
+    // 扫描 SVG 里所有 note 图标，直接绑定 DOM mouseenter/mouseleave
+    _bindDomNoteIcons() {
+      try {
+        const minder = this.minder
+        if (!minder) return
+        const paper = minder.getPaper()
+        const svgEl = paper && (paper.container || paper.node)
+        if (!svgEl) return
+
+        // 找所有已绑定了 kity mouseover 的小 g 元素（note 图标）
+        // kity 图标的特征：宽高 < 30px，且节点有 note 数据
+        const allNodes = minder.getAllNode ? minder.getAllNode() : []
+        allNodes.forEach(node => {
+          if (!node.getData('note')) return
+          // 找该节点的 note 图标 DOM 元素
+          // kity 把图标渲染为 node.rc（render container）下的子 g 元素
+          const rc = node.rc
+          if (!rc) return
+          const iconEls = rc.node ? rc.node.querySelectorAll('g') : []
+          iconEls.forEach(el => {
+            const rect = el.getBoundingClientRect()
+            if (rect.width > 0 && rect.width < 30 && rect.height > 0 && rect.height < 30) {
+              if (!el._noteIconBound) {
+                el._noteIconBound = true
+                el.addEventListener('mouseenter', (ev) => {
+                  // 如果 shownoterequest 已经处理了（noteTooltipVisible=true），不重复处理
+                  if (this.noteTooltipVisible) return
+                  this._mouseX = ev.clientX
+                  this._mouseY = ev.clientY
+                  this._onShowNoteRequest({ node, icon: null })
+                })
+                el.addEventListener('mouseleave', () => {
+                  this._onHideNoteRequest()
+                })
+              }
+            }
+          })
+        })
+      } catch (err) { /* ignore */ }
     },
 
     unbindMinderNoteEvents() {
@@ -414,6 +465,7 @@ export default {
       if (this._onEditNoteRequest) minder.off('editnoterequest', this._onEditNoteRequest)
       if (this._onShowNoteRequest) minder.off('shownoterequest', this._onShowNoteRequest)
       if (this._onHideNoteRequest) minder.off('hidenoterequest', this._onHideNoteRequest)
+      if (this._onLayoutDone) minder.off('layoutallfinish layout', this._onLayoutDone)
       if (this._onMouseMove) {
         document.removeEventListener('mousemove', this._onMouseMove)
         document.removeEventListener('mouseover', this._onMouseMove)
