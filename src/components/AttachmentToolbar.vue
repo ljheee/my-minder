@@ -360,11 +360,13 @@ export default {
         }
       } catch (err) { /* ignore */ }
       this._onEditNoteRequest = () => {
-        const node = minder.getSelectedNode()
+        // kity 的 editnoterequest 不携带 node 信息，需要自己找目标节点
+        // 优先用 hover 时记录的节点（_hoveredNoteNode），其次用当前选中节点
+        const node = this._hoveredNoteNode || minder.getSelectedNode()
         if (node) {
           this.targetNode = node
           this.noteContent = node.getData('note') || ''
-          this.originalNote = this.noteContent  // 记录原始内容，确保 noteChanged 计算正确
+          this.originalNote = this.noteContent
           this.noteDialogVisible = true
           this.$nextTick(() => {
             if (this.$refs.noteTextarea) this.$refs.noteTextarea.focus()
@@ -373,6 +375,7 @@ export default {
       }
       this._onShowNoteRequest = (e) => {
         if (!e || !e.node) return
+        this._hoveredNoteNode = e.node  // 记录当前 hover 的节点，供 editnoterequest 使用
         this.noteTooltipContent = e.node.getData('note') || ''
         // 1. 优先用 mousemove 实时记录的鼠标坐标
         let x = this._mouseX
@@ -406,6 +409,8 @@ export default {
       }
       this._onHideNoteRequest = () => {
         this.noteTooltipVisible = false
+        // 延迟清除，避免 mouseout→mousedown 时序下 _hoveredNoteNode 已被清空
+        setTimeout(() => { this._hoveredNoteNode = null }, 300)
       }
       minder.on('editnoterequest', this._onEditNoteRequest)
       minder.on('shownoterequest', this._onShowNoteRequest)
@@ -443,14 +448,28 @@ export default {
               if (!el._noteIconBound) {
                 el._noteIconBound = true
                 el.addEventListener('mouseenter', (ev) => {
-                  // 如果 shownoterequest 已经处理了（noteTooltipVisible=true），不重复处理
-                  if (this.noteTooltipVisible) return
+                  this._hoveredNoteNode = node  // 记录 hover 节点
                   this._mouseX = ev.clientX
                   this._mouseY = ev.clientY
-                  this._onShowNoteRequest({ node, icon: null })
+                  if (!this.noteTooltipVisible) {
+                    this._onShowNoteRequest({ node, icon: null })
+                  }
                 })
                 el.addEventListener('mouseleave', () => {
                   this._onHideNoteRequest()
+                })
+                // mousedown fallback：kity 的 editnoterequest 不可靠时直接打开面板
+                el.addEventListener('mousedown', (ev) => {
+                  ev.preventDefault()
+                  ev.stopPropagation()
+                  this._hoveredNoteNode = node
+                  // 延迟一帧，让 kity 的 editnoterequest 先尝试处理
+                  // 如果面板已经打开则不重复处理
+                  setTimeout(() => {
+                    if (!this.noteDialogVisible) {
+                      this._onEditNoteRequest()
+                    }
+                  }, 50)
                 })
               }
             }
@@ -657,6 +676,8 @@ export default {
 
       this.noteDialogVisible = false
       this.$message.success('备注已添加')
+      // 备注保存后重新扫描绑定图标事件（新图标刚渲染出来）
+      this.$nextTick(() => { this._bindDomNoteIcons() })
     },
 
     removeNote() {
