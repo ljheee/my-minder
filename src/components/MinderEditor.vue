@@ -18,25 +18,37 @@
       <p>← 从左侧选择或新建一个脑图文件</p>
     </div>
 
-    <!-- 脑图编辑器 - 使用第三方库的组件 -->
+    <!-- 脑图编辑器
+         key 绑定文件路径：切换文件时销毁重建，import-json 会随新实例自动传入，无需手动 importJson -->
     <minder-editor
       v-show="hasContent"
-      :key="fileData?.path || 'empty'"
+      :key="fileData && fileData.path || 'empty'"
       :import-json="jsonData"
       :height="height"
       style="flex:1;overflow:hidden;"
-    />
+    >
+      <!-- 将附件工具栏注入到编辑菜单插槽（edit-del 之后） -->
+      <template slot="edit-menu">
+        <attachment-toolbar v-if="hasContent" />
+      </template>
+    </minder-editor>
   </div>
 </template>
 
 <script>
+import AttachmentToolbar from './AttachmentToolbar.vue'
+
 export default {
-  // 注意：不要用 MinderEditor 或 minder-editor 作为组件名
-  // 因为 vue-minder-editor-extended 库已经全局注册了这个名字
+  // 不能用 MinderEditor / minder-editor 作为组件名
+  // vue-minder-editor-extended 已全局注册了该名字
   name: 'MindMapEditor',
 
+  components: {
+    AttachmentToolbar
+  },
+
   props: {
-    fileData: Object  // { path, name, content }
+    fileData: Object  // { path, name, content, sha, dirty }
   },
 
   data() {
@@ -44,53 +56,42 @@ export default {
       height: 600
     }
   },
-  
+
   computed: {
     hasContent() {
-      const hasContent = !!this.fileData?.content
-      console.log('[MinderEditor] hasContent:', hasContent, 'fileData:', this.fileData?.path)
-      return hasContent
+      return !!this.fileData && !!this.fileData.content
     },
     fileName() {
-      return this.fileData?.name?.replace(/\.km$/, '') || '未命名'
+      return this.fileData && this.fileData.name
+        ? this.fileData.name.replace(/\.km$/, '')
+        : '未命名'
     },
     jsonData() {
+      if (!this.fileData || !this.fileData.content) return null
       try {
-        const data = this.fileData?.content ? JSON.parse(this.fileData.content) : null
-        console.log('[MinderEditor] jsonData:', data?.root?.data?.text)
-        return data
+        return JSON.parse(this.fileData.content)
       } catch (e) {
-        console.error('[MinderEditor] JSON parse error:', e)
+        console.error('[MindMapEditor] JSON parse error:', e)
         return null
       }
     },
     isDirty() {
-      return this.fileData?.dirty || false
+      return !!(this.fileData && this.fileData.dirty)
     },
     isSaving() {
       return this.$store.getters['files/isFileSaving']
-    }
-  },
-  
-  watch: {
-    fileData: {
-      handler(newVal) {
-        console.log('[MinderEditor] fileData changed:', newVal?.path, newVal?.content?.length)
-      },
-      deep: true
     }
   },
 
   mounted() {
     this.calcHeight()
     window.addEventListener('resize', this.calcHeight)
-    console.log('[MinderEditor] mounted, fileData:', this.fileData?.path)
   },
-  
+
   beforeDestroy() {
     window.removeEventListener('resize', this.calcHeight)
   },
-  
+
   methods: {
     calcHeight() {
       if (this.$el) this.height = Math.max(400, this.$el.clientHeight - 44)
@@ -118,6 +119,10 @@ export default {
   padding: 0 16px;
   background: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
+}
+.toolbar-left {
+  display: flex;
+  align-items: center;
 }
 .file-name {
   font-size: 14px;
@@ -150,5 +155,13 @@ export default {
   align-items: center;
   justify-content: center;
   color: #999;
+}
+</style>
+
+<!-- 非 scoped：覆盖库的样式，确保附件工具栏下拉菜单不被裁剪 -->
+<style>
+.menu-container > .attachment-group {
+  overflow: visible !important;
+  width: auto !important;
 }
 </style>

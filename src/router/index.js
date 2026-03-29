@@ -4,6 +4,14 @@ import store from '@/store'
 
 Vue.use(VueRouter)
 
+// 修复 NavigationDuplicated 报错：忽略重复导航异常
+const originalPush = VueRouter.prototype.push
+VueRouter.prototype.push = function push(location) {
+  return originalPush.call(this, location).catch(err => {
+    if (err.name !== 'NavigationDuplicated') throw err
+  })
+}
+
 const routes = [
   {
     path: '/login',
