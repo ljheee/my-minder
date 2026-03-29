@@ -3,11 +3,13 @@
     <!-- 链接按钮 -->
     <div class="btn-group-vertical">
       <el-dropdown trigger="click" @command="handleLinkCommand" placement="bottom-start">
-        <button type="button" class="btn btn-default hyperlink" title="链接"></button>
-        <button type="button" class="btn btn-default hyperlink-caption dropdown-toggle" title="链接">
-          <span class="caption">链接</span>
-          <span class="caret"></span>
-        </button>
+        <div class="attachment-trigger">
+          <button type="button" class="btn btn-default hyperlink" title="链接"></button>
+          <button type="button" class="btn btn-default hyperlink-caption dropdown-toggle" title="链接">
+            <span class="caption">链接</span>
+            <span class="caret"></span>
+          </button>
+        </div>
         <el-dropdown-menu slot="dropdown">
           <el-dropdown-item command="insert">插入链接</el-dropdown-item>
           <el-dropdown-item command="remove" :disabled="!hasHyperlink">移除已有链接</el-dropdown-item>
@@ -18,11 +20,13 @@
     <!-- 图片按钮 -->
     <div class="btn-group-vertical">
       <el-dropdown trigger="click" @command="handleImageCommand" placement="bottom-start">
-        <button type="button" class="btn btn-default image-btn" title="图片"></button>
-        <button type="button" class="btn btn-default image-btn-caption dropdown-toggle" title="图片">
-          <span class="caption">图片</span>
-          <span class="caret"></span>
-        </button>
+        <div class="attachment-trigger">
+          <button type="button" class="btn btn-default image-btn" title="图片"></button>
+          <button type="button" class="btn btn-default image-btn-caption dropdown-toggle" title="图片">
+            <span class="caption">图片</span>
+            <span class="caret"></span>
+          </button>
+        </div>
         <el-dropdown-menu slot="dropdown">
           <el-dropdown-item command="insert">插入图片</el-dropdown-item>
           <el-dropdown-item command="remove" :disabled="!hasImage">移除已有图片</el-dropdown-item>
@@ -33,11 +37,13 @@
     <!-- 备注按钮 -->
     <div class="btn-group-vertical">
       <el-dropdown trigger="click" @command="handleNoteCommand" placement="bottom-start">
-        <button type="button" class="btn btn-default note-btn" title="备注"></button>
-        <button type="button" class="btn btn-default note-btn-caption dropdown-toggle" title="备注">
-          <span class="caption">备注</span>
-          <span class="caret"></span>
-        </button>
+        <div class="attachment-trigger">
+          <button type="button" class="btn btn-default note-btn" title="备注"></button>
+          <button type="button" class="btn btn-default note-btn-caption dropdown-toggle" title="备注">
+            <span class="caption">备注</span>
+            <span class="caret"></span>
+          </button>
+        </div>
         <el-dropdown-menu slot="dropdown">
           <el-dropdown-item command="insert">插入备注</el-dropdown-item>
           <el-dropdown-item command="remove" :disabled="!hasNote">移除已有备注</el-dropdown-item>
@@ -783,6 +789,14 @@ export default {
 /* 备注图标 */
 .attachment-group .note-btn {
   background-position: 50% -1150px;
+}
+
+/* trigger 容器：让图标和文字都能触发下拉 */
+.attachment-group .attachment-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
 }
 
 /* 文字按钮（带下拉箭头） */
