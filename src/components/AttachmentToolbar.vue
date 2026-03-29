@@ -164,25 +164,28 @@
     </el-dialog>
 
     <!-- 备注侧边面板（fixed 定位，从右侧滑入） -->
-    <transition name="note-panel">
-      <div v-if="noteDialogVisible" class="note-side-overlay" @click.self="noteDialogVisible = false">
-        <div class="note-panel-inner">
-          <div class="note-panel-header">
-            <span class="note-panel-title">备注</span>
-            <button class="note-panel-close" @click="noteDialogVisible = false">×</button>
-          </div>
-          <div class="note-panel-body">
-            <textarea
-              ref="noteTextarea"
-              class="note-panel-textarea"
-              v-model="noteContent"
-              placeholder="请输入备注内容..."
-            ></textarea>
-          </div>
-          <div class="note-panel-footer">
-            <el-button @click="noteDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="applyNote">保存</el-button>
-          </div>
+    <!-- 遮罩层：淡入淡出 -->
+    <transition name="note-overlay">
+      <div v-if="noteDialogVisible" class="note-side-overlay" @click.self="noteDialogVisible = false"></div>
+    </transition>
+    <!-- 面板主体：从右侧滑入 -->
+    <transition name="note-slide">
+      <div v-if="noteDialogVisible" class="note-panel-inner">
+        <div class="note-panel-header">
+          <span class="note-panel-title">备注</span>
+          <button class="note-panel-close" @click="noteDialogVisible = false">×</button>
+        </div>
+        <div class="note-panel-body">
+          <textarea
+            ref="noteTextarea"
+            class="note-panel-textarea"
+            v-model="noteContent"
+            placeholder="请输入备注内容..."
+          ></textarea>
+        </div>
+        <div class="note-panel-footer">
+          <button class="note-footer-btn note-footer-cancel" @click="noteDialogVisible = false">取消</button>
+          <button class="note-footer-btn note-footer-save" @click="applyNote">保存</button>
         </div>
       </div>
     </transition>
@@ -757,7 +760,7 @@ export default {
 
 /* ===== 备注侧边面板 ===== */
 
-/* 半透明遮罩层（点击关闭） */
+/* 半透明遮罩层 */
 .note-side-overlay {
   position: fixed;
   inset: 0;
@@ -765,9 +768,19 @@ export default {
   background: rgba(0, 0, 0, 0.25);
 }
 
-/* 面板主体：从右侧滑入 */
+/* 遮罩淡入淡出 */
+.note-overlay-enter-active,
+.note-overlay-leave-active {
+  transition: opacity 0.25s ease;
+}
+.note-overlay-enter,
+.note-overlay-leave-to {
+  opacity: 0;
+}
+
+/* 面板主体：从右侧滑入，fixed 定位脱离文档流 */
 .note-panel-inner {
-  position: absolute;
+  position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
@@ -775,7 +788,22 @@ export default {
   background: #fff;
   display: flex;
   flex-direction: column;
-  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18);
+  z-index: 2001;
+}
+
+/* 面板滑入/滑出动画 */
+.note-slide-enter-active,
+.note-slide-leave-active {
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.note-slide-enter,
+.note-slide-leave-to {
+  transform: translateX(100%);
+}
+.note-slide-enter-to,
+.note-slide-leave {
+  transform: translateX(0);
 }
 
 /* 面板头部 */
@@ -845,45 +873,67 @@ export default {
   box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
 }
 
-/* 面板底部按钮 */
+/* 面板底部按钮区 */
 .note-panel-footer {
   padding: 12px 20px 16px;
   border-top: 1px solid #eee;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-/* 滑入/滑出动画 */
-.note-panel-enter-active,
-.note-panel-leave-active {
-  transition: opacity 0.25s ease;
+/* 底部按钮基础样式
+   用 ::v-deep 穿透 scoped，确保选择器命中原生 button 元素 */
+.note-panel-footer ::v-deep button {
+  height: 32px !important;
+  min-height: 32px !important;
+  width: auto !important;
+  min-width: 56px !important;
+  max-width: none !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  transition: background 0.18s, border-color 0.18s, color 0.18s !important;
+  font-family: inherit !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  flex-shrink: 0 !important;
 }
 
-.note-panel-enter-active .note-panel-inner,
-.note-panel-leave-active .note-panel-inner {
-  transition: transform 0.25s ease;
+/* 取消按钮：有边框，hover 加深 */
+.note-panel-footer ::v-deep button.note-footer-cancel {
+  color: #606266 !important;
+  border-color: #dcdfe6 !important;
+}
+.note-panel-footer ::v-deep button.note-footer-cancel:hover {
+  color: #409eff !important;
+  border-color: #c6e2ff !important;
+  background: #ecf5ff !important;
 }
 
-.note-panel-enter .note-side-overlay,
-.note-panel-leave-to .note-side-overlay {
-  opacity: 0;
+/* 保存按钮：文字透明，hover 才显示文字和轮廓 */
+.note-panel-footer ::v-deep button.note-footer-save {
+  color: transparent !important;
+  border-color: transparent !important;
 }
-
-.note-panel-enter .note-panel-inner,
-.note-panel-leave-to .note-panel-inner {
-  transform: translateX(100%);
+.note-panel-footer ::v-deep button.note-footer-save:hover {
+  color: #409eff !important;
+  border-color: rgba(64, 158, 255, 0.5) !important;
+  background: rgba(64, 158, 255, 0.06) !important;
 }
-
-.note-panel-enter-to .note-panel-inner,
-.note-panel-leave .note-panel-inner {
-  transform: translateX(0);
-}
-
-.note-panel-enter,
-.note-panel-leave-to {
-  opacity: 0;
+.note-panel-footer ::v-deep button.note-footer-save:active {
+  color: #409eff !important;
+  background: rgba(64, 158, 255, 0.15) !important;
+  border-color: #409eff !important;
 }
 
 /* ===== 备注预览 tooltip ===== */
