@@ -150,7 +150,11 @@ export default {
     },
 
     calcHeight() {
-      if (this.$el) this.height = Math.max(400, this.$el.clientHeight - 44)
+      if (!this.$el) return
+      // 动态读取顶部工具栏实际高度，而不是写死
+      const toolbar = this.$el.querySelector('.editor-toolbar')
+      const toolbarH = toolbar ? toolbar.offsetHeight : 44
+      this.height = Math.max(400, this.$el.clientHeight - toolbarH)
     },
 
     async save() {
@@ -181,6 +185,7 @@ export default {
   flex-direction: column;
   height: 100%;
   background: #fff;
+  overflow: visible;
 }
 .editor-toolbar {
   display: flex;
@@ -231,6 +236,18 @@ export default {
 
 <!-- 非 scoped：覆盖库的样式 -->
 <style>
+/* 导航栏和预览器：固定在 viewport 内，跟随侧边栏宽度动态偏移 */
+.nav-bar {
+  position: fixed !important;
+  bottom: 20px !important;
+  left: calc(var(--sidebar-width, 276px) + 10px) !important;
+}
+.nav-previewer {
+  position: fixed !important;
+  bottom: 60px !important;
+  left: calc(var(--sidebar-width, 276px) + 45px) !important;
+}
+
 /* 附件工具栏下拉菜单不被裁剪 */
 .menu-container > .attachment-group {
   overflow: visible !important;

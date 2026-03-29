@@ -43,7 +43,7 @@
       </svg>
     </button>
 
-    <div class="main-area">
+    <div class="main-area" :style="{ '--sidebar-width': (sidebarCollapsed ? 16 : sidebarWidth + 16) + 'px' }">
       <minder-editor :file-data="currentFile" />
     </div>
   </div>
@@ -310,7 +310,9 @@ export default {
   flex: 1;
   min-width: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   background: #ffffff;
+  position: relative;
 }
 </style>
