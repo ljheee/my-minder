@@ -27,8 +27,10 @@
       :key="fileData.path"
       :import-json="jsonData"
       :height="height"
+      :disabled="isSaving"
       style="flex:1;overflow:hidden;"
       @hook:mounted="onMinderReady"
+      @save="onLibSave"
     >
       <!-- 将附件工具栏注入到编辑菜单插槽（edit-del 之后） -->
       <template slot="edit-menu">
@@ -125,14 +127,25 @@ export default {
     },
 
     _onContentChange() {
+      // 只标记 dirty，不导出 JSON
+      // 原因：Tab/afterexeccommand 触发时节点可能处于编辑中间状态（text 为空），
+      // 此时导出会保存不完整数据。最终内容在用户点保存时从 minder 实例实时导出。
+      this.$store.commit('files/SET_FILE_DIRTY', true)
+    },
+
+    // 库自带保存按钮触发的 save 事件
+    onLibSave() {
+      // 从 minder 实例实时导出最新完整 JSON，再保存
       const minder = this.minderInstance
-      if (!minder) return
-      try {
-        const json = JSON.stringify(minder.exportJson())
-        this.$store.commit('files/UPDATE_FILE_CONTENT', json)
-      } catch (e) {
-        console.error('[MinderEditor] 导出失败:', e)
+      if (minder) {
+        try {
+          const json = JSON.stringify(minder.exportJson())
+          this.$store.commit('files/UPDATE_FILE_CONTENT', json)
+        } catch (e) {
+          console.error('[MinderEditor] 导出失败:', e)
+        }
       }
+      this.save()
     },
 
     calcHeight() {
@@ -140,6 +153,16 @@ export default {
     },
 
     async save() {
+      // 如果是通过顶部工具栏按钮触发（非库按钮），也需要先导出最新 JSON
+      const minder = this.minderInstance
+      if (minder) {
+        try {
+          const json = JSON.stringify(minder.exportJson())
+          this.$store.commit('files/UPDATE_FILE_CONTENT', json)
+        } catch (e) {
+          console.error('[MinderEditor] 导出失败:', e)
+        }
+      }
       try {
         await this.$store.dispatch('files/saveCurrentFile')
         this.$message({ message: '保存成功', type: 'success', duration: 1500 })
