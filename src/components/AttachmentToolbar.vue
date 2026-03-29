@@ -314,12 +314,17 @@ export default {
     _calcTooltipPos(mouseX, mouseY) {
       const W = window.innerWidth
       const H = window.innerHeight
-      const TW = 240  // tooltip max-width
-      const TH = 120  // tooltip max-height
       const OFFSET = 14
+      // 用实际 DOM 尺寸，避免估算偏差
+      const el = this.$el?.querySelector('.note-tooltip')
+      // offsetWidth 在首次渲染前可能为 0，用 max-width 作为上限估算
+      const TW = (el && el.offsetWidth > 0) ? el.offsetWidth : 180
+      const TH = (el && el.offsetHeight > 0) ? el.offsetHeight : 80
       let left = mouseX + OFFSET
       let top = mouseY + OFFSET
+      // 右侧放不下时，放到鼠标左侧
       if (left + TW > W - 8) left = mouseX - TW - OFFSET
+      // 下方放不下时，放到鼠标上方
       if (top + TH > H - 8) top = mouseY - TH - OFFSET
       if (left < 8) left = 8
       if (top < 8) top = 8
@@ -329,11 +334,31 @@ export default {
     bindMinderNoteEvents() {
       const minder = this.minder
       if (!minder) return
-      // 跟踪全局鼠标位置，供 tooltip 定位使用
+      // 跟踪鼠标位置：同时监听 document 和 minder canvas，确保坐标始终准确
       this._mouseX = 0
       this._mouseY = 0
-      this._onMouseMove = (ev) => { this._mouseX = ev.clientX; this._mouseY = ev.clientY }
+      this._onMouseMove = (ev) => {
+        // kity 事件有 originEvent，原生 DOM 事件直接有 clientX
+        const clientX = ev.clientX ?? ev.originEvent?.clientX ?? 0
+        const clientY = ev.clientY ?? ev.originEvent?.clientY ?? 0
+        if (!clientX && !clientY) return
+        this._mouseX = clientX
+        this._mouseY = clientY
+        // tooltip 显示中时实时更新位置
+        if (this.noteTooltipVisible) {
+          this.noteTooltipStyle = this._calcTooltipPos(clientX, clientY)
+        }
+      }
+      // mousemove + mouseover 双保险：mouseover 解决鼠标直接移入图标时 mousemove 不触发的问题
       document.addEventListener('mousemove', this._onMouseMove)
+      document.addEventListener('mouseover', this._onMouseMove)
+      try {
+        const paper = minder.getPaper()
+        if (paper) {
+          this._minderPaper = paper
+          paper.on('mousemove mouseover', this._onMouseMove)
+        }
+      } catch (err) { /* ignore */ }
       this._onEditNoteRequest = () => {
         const node = minder.getSelectedNode()
         if (node) {
@@ -345,21 +370,35 @@ export default {
       this._onShowNoteRequest = (e) => {
         if (!e || !e.node) return
         this.noteTooltipContent = e.node.getData('note') || ''
-        // 从 icon 的 SVG DOM 元素获取屏幕坐标
-        let x = 0, y = 0
-        try {
-          // e.icon 是 kity Group，其 node 属性是 SVG DOM 元素
-          const svgEl = e.icon && (e.icon.node || e.icon.getNode?.())
-          if (svgEl) {
-            const rect = svgEl.getBoundingClientRect()
-            x = rect.right
-            y = rect.bottom
-          }
-        } catch (e) { /* ignore */ }
-        // 兜底：用鼠标位置
-        if (!x && !y) { x = this._mouseX; y = this._mouseY }
+        // 1. 优先用 mousemove 实时记录的鼠标坐标
+        let x = this._mouseX
+        let y = this._mouseY
+        // 2. 从事件的 originEvent 取（kity 事件携带原生 DOM 事件）
+        if (!x || !y) {
+          const oe = e.originEvent || e.nativeEvent
+          if (oe && oe.clientX) { x = oe.clientX; y = oe.clientY }
+        }
+        // 3. 兜底：从 icon SVG 元素的 BoundingClientRect 取中心点
+        if (!x || !y) {
+          try {
+            const svgEl = e.icon && (e.icon.node || e.icon.getNode?.())
+            if (svgEl) {
+              const rect = svgEl.getBoundingClientRect()
+              x = rect.left + rect.width / 2
+              y = rect.top + rect.height / 2
+            }
+          } catch (err) { /* ignore */ }
+        }
+        // 先用估算位置显示，nextTick 后用实际 DOM 尺寸精确定位
         this.noteTooltipStyle = this._calcTooltipPos(x, y)
         this.noteTooltipVisible = true
+        this._tooltipAnchorX = x
+        this._tooltipAnchorY = y
+        this.$nextTick(() => {
+          if (this.noteTooltipVisible) {
+            this.noteTooltipStyle = this._calcTooltipPos(this._tooltipAnchorX, this._tooltipAnchorY)
+          }
+        })
       }
       this._onHideNoteRequest = () => {
         this.noteTooltipVisible = false
@@ -375,7 +414,13 @@ export default {
       if (this._onEditNoteRequest) minder.off('editnoterequest', this._onEditNoteRequest)
       if (this._onShowNoteRequest) minder.off('shownoterequest', this._onShowNoteRequest)
       if (this._onHideNoteRequest) minder.off('hidenoterequest', this._onHideNoteRequest)
-      if (this._onMouseMove) document.removeEventListener('mousemove', this._onMouseMove)
+      if (this._onMouseMove) {
+        document.removeEventListener('mousemove', this._onMouseMove)
+        document.removeEventListener('mouseover', this._onMouseMove)
+      }
+      if (this._minderPaper && this._onMouseMove) {
+        try { this._minderPaper.off('mousemove mouseover', this._onMouseMove) } catch (err) { /* ignore */ }
+      }
     },
 
     // ========== 链接 ==========
@@ -992,7 +1037,7 @@ export default {
   border: 1px solid #ffe58f;
   border-radius: 6px;
   padding: 8px 12px;
-  max-width: 240px;
+  max-width: 180px;
   /* 最多显示约 5 行 */
   max-height: calc(13px * 1.5 * 5 + 16px);
   overflow: hidden;
