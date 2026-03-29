@@ -187,6 +187,11 @@
         <el-button type="primary" @click="applyNote">确定</el-button>
       </div>
     </el-dialog>
+
+    <!-- 备注预览 tooltip（hover 备注图标时显示） -->
+    <div v-if="noteTooltipVisible" class="note-tooltip">
+      <pre>{{ noteTooltipContent }}</pre>
+    </div>
   </div>
 </template>
 
@@ -231,6 +236,11 @@ export default {
       // 备注
       noteDialogVisible: false,
       noteContent: '',
+
+      // 备注预览 tooltip
+      noteTooltipVisible: false,
+      noteTooltipContent: '',
+      noteTooltipStyle: {},
     }
   },
 
@@ -254,17 +264,20 @@ export default {
   },
 
   mounted() {
-    // 在组件挂载后，将元素移动到正确的位置
+    this.$nextTick(() => {
+      this.moveToCorrectPosition()
+      this.bindMinderNoteEvents()
+    })
+  },
+
+  updated() {
     this.$nextTick(() => {
       this.moveToCorrectPosition()
     })
   },
 
-  updated() {
-    // 组件更新时也检查位置
-    this.$nextTick(() => {
-      this.moveToCorrectPosition()
-    })
+  beforeDestroy() {
+    this.unbindMinderNoteEvents()
   },
 
   methods: {
@@ -287,6 +300,39 @@ export default {
           menuContainer.appendChild(attachmentGroup)
         }
       }
+    },
+
+    // ========== minder 备注事件绑定 ==========
+    bindMinderNoteEvents() {
+      const minder = this.minder
+      if (!minder) return
+      this._onEditNoteRequest = () => {
+        const node = minder.getSelectedNode()
+        if (node) {
+          this.targetNode = node
+          this.noteContent = node.getData('note') || ''
+          this.noteDialogVisible = true
+        }
+      }
+      this._onShowNoteRequest = (e) => {
+        if (!e || !e.node) return
+        this.noteTooltipContent = e.node.getData('note') || ''
+        this.noteTooltipVisible = true
+      }
+      this._onHideNoteRequest = () => {
+        this.noteTooltipVisible = false
+      }
+      minder.on('editnoterequest', this._onEditNoteRequest)
+      minder.on('shownoterequest', this._onShowNoteRequest)
+      minder.on('hidenoterequest', this._onHideNoteRequest)
+    },
+
+    unbindMinderNoteEvents() {
+      const minder = this.minder
+      if (!minder) return
+      if (this._onEditNoteRequest) minder.off('editnoterequest', this._onEditNoteRequest)
+      if (this._onShowNoteRequest) minder.off('shownoterequest', this._onShowNoteRequest)
+      if (this._onHideNoteRequest) minder.off('hidenoterequest', this._onHideNoteRequest)
     },
 
     // ========== 链接 ==========
@@ -453,7 +499,13 @@ export default {
       this.restoreFocusAndSelect()
 
       // 使用 execCommand 触发完整的渲染流程（包括 contentchange 事件和图标渲染）
-      this.minder.execCommand('note', this.noteContent)
+      // 包裹 try/catch：库内部在首次渲染时可能抛出 HyperLink.fill 错误，但数据已写入，重试一次即可正常渲染
+      try {
+        this.minder.execCommand('note', this.noteContent)
+      } catch (e) {
+        // 首次渲染失败，重试一次（此时 renderer 已初始化）
+        try { this.minder.execCommand('note', this.noteContent) } catch (_) { /* 重试仍失败则忽略 */ }
+      }
 
       this.noteDialogVisible = false
       this.$message.success('备注已添加')
@@ -695,6 +747,33 @@ export default {
 /* 弹窗底部按钮 */
 .dialog-footer {
   text-align: right;
+}
+
+/* 备注预览 tooltip */
+.note-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 4px;
+  padding: 8px 12px;
+  max-width: 300px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  pointer-events: none;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.note-tooltip pre {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  color: #333;
 }
 </style>
 

@@ -4,13 +4,20 @@ import store from '@/store'
 
 Vue.use(VueRouter)
 
-// 修复 NavigationDuplicated 报错：忽略重复导航异常
-const originalPush = VueRouter.prototype.push
-VueRouter.prototype.push = function push(location) {
-  return originalPush.call(this, location).catch(err => {
-    if (err.name !== 'NavigationDuplicated') throw err
-  })
+// 修复 NavigationDuplicated / NavigationRedirected 报错
+// vue-router 3.x 在守卫重定向时会 reject 原始 Promise，属正常行为，忽略即可
+const IGNORED_ERRORS = ['NavigationDuplicated', 'NavigationRedirected', 'NavigationCancelled']
+function patchNavigation(fn) {
+  return function (location, onComplete, onAbort) {
+    if (onComplete || onAbort) return fn.call(this, location, onComplete, onAbort)
+    return fn.call(this, location).catch(err => {
+      if (err && IGNORED_ERRORS.includes(err.name)) return err
+      return Promise.reject(err)
+    })
+  }
 }
+VueRouter.prototype.push = patchNavigation(VueRouter.prototype.push)
+VueRouter.prototype.replace = patchNavigation(VueRouter.prototype.replace)
 
 const routes = [
   {
