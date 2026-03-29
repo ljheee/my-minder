@@ -209,7 +209,7 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
-import { listRepos, createRepo } from '@/api/github'
+import { listRepos, createRepo } from '@/api'
 import TreeNode from './TreeNode.vue'
 
 export default {

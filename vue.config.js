@@ -11,6 +11,17 @@ module.exports = defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true
       }
+    },
+    // 屏蔽 vue-minder-editor-extended 已知库 bug 导致的 overlay 报错弹窗
+    client: {
+      overlay: {
+        runtimeErrors: (error) => {
+          if (error && error.message && error.message.includes("Cannot read properties of undefined (reading 'fill')")) {
+            return false
+          }
+          return true
+        }
+      }
     }
   },
   // 配置 webpack 处理 vue-minder-editor-extended 的依赖

@@ -51,24 +51,19 @@ const router = new VueRouter({
   routes
 })
 
-// 本地调试模式：通过环境变量控制，不影响生产环境
-const isLocalMode = process.env.VUE_APP_ENABLE_LOCAL_MODE === 'true'
+// 本地调试模式：构建时确定，路由守卫无需关心具体实现
+const IS_LOCAL_MODE = process.env.VUE_APP_ENABLE_LOCAL_MODE === 'true'
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
-  const isLoggedIn = store.getters['auth/isLoggedIn']
-
-  // 本地调试模式：自动模拟登录状态
-  if (isLocalMode && !isLoggedIn) {
-    // 模拟用户信息
+  // 本地调试模式：自动注入模拟登录状态，跳过 GitHub 认证流程
+  if (IS_LOCAL_MODE && !store.getters['auth/isLoggedIn']) {
     store.commit('auth/SET_TOKEN', 'local_dev_token')
     store.commit('auth/SET_USER', {
       login: 'local_dev',
       name: '本地开发者',
       avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4'
     })
-
-    // 自动选择默认仓库
     if (!store.getters['auth/selectedRepo']) {
       store.commit('auth/SET_SELECTED_REPO', {
         id: 'local',
@@ -85,10 +80,10 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  // 正常验证登录
-  if (to.meta.requiresAuth && !isLoggedIn && !isLocalMode) {
+  const isLoggedIn = store.getters['auth/isLoggedIn']
+  if (to.meta.requiresAuth && !isLoggedIn) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else if (to.name === 'Login' && (isLoggedIn || isLocalMode)) {
+  } else if (to.name === 'Login' && isLoggedIn) {
     next({ name: 'Editor' })
   } else {
     next()

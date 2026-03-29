@@ -13,7 +13,7 @@ import {
   createMinderFile,
   createFolder,
   deleteFolder
-} from '@/api/github'
+} from '@/api'
 
 export default {
   namespaced: true,

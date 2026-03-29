@@ -3,7 +3,7 @@
  * 管理 GitHub token、用户信息、选中的仓库
  */
 
-import { getUser } from '@/api/github'
+import { getUser } from '@/api'
 
 const STORAGE_KEY_TOKEN = 'github_token'
 const STORAGE_KEY_USER = 'github_user'
