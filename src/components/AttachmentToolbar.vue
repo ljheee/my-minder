@@ -191,8 +191,8 @@
     </transition>
 
     <!-- 备注预览 tooltip（hover 备注图标时显示） -->
-    <div v-if="noteTooltipVisible" class="note-tooltip">
-      <pre>{{ noteTooltipContent }}</pre>
+    <div v-if="noteTooltipVisible" class="note-tooltip" :style="noteTooltipStyle">
+      <div class="note-tooltip-text">{{ noteTooltipContent }}</div>
     </div>
   </div>
 </template>
@@ -310,9 +310,30 @@ export default {
     },
 
     // ========== minder 备注事件绑定 ==========
+    // 计算 tooltip 位置，确保不超出屏幕边界
+    _calcTooltipPos(mouseX, mouseY) {
+      const W = window.innerWidth
+      const H = window.innerHeight
+      const TW = 240  // tooltip max-width
+      const TH = 120  // tooltip max-height
+      const OFFSET = 14
+      let left = mouseX + OFFSET
+      let top = mouseY + OFFSET
+      if (left + TW > W - 8) left = mouseX - TW - OFFSET
+      if (top + TH > H - 8) top = mouseY - TH - OFFSET
+      if (left < 8) left = 8
+      if (top < 8) top = 8
+      return { left: left + 'px', top: top + 'px', bottom: 'auto', transform: 'none' }
+    },
+
     bindMinderNoteEvents() {
       const minder = this.minder
       if (!minder) return
+      // 跟踪全局鼠标位置，供 tooltip 定位使用
+      this._mouseX = 0
+      this._mouseY = 0
+      this._onMouseMove = (ev) => { this._mouseX = ev.clientX; this._mouseY = ev.clientY }
+      document.addEventListener('mousemove', this._onMouseMove)
       this._onEditNoteRequest = () => {
         const node = minder.getSelectedNode()
         if (node) {
@@ -324,6 +345,20 @@ export default {
       this._onShowNoteRequest = (e) => {
         if (!e || !e.node) return
         this.noteTooltipContent = e.node.getData('note') || ''
+        // 从 icon 的 SVG DOM 元素获取屏幕坐标
+        let x = 0, y = 0
+        try {
+          // e.icon 是 kity Group，其 node 属性是 SVG DOM 元素
+          const svgEl = e.icon && (e.icon.node || e.icon.getNode?.())
+          if (svgEl) {
+            const rect = svgEl.getBoundingClientRect()
+            x = rect.right
+            y = rect.bottom
+          }
+        } catch (e) { /* ignore */ }
+        // 兜底：用鼠标位置
+        if (!x && !y) { x = this._mouseX; y = this._mouseY }
+        this.noteTooltipStyle = this._calcTooltipPos(x, y)
         this.noteTooltipVisible = true
       }
       this._onHideNoteRequest = () => {
@@ -340,6 +375,7 @@ export default {
       if (this._onEditNoteRequest) minder.off('editnoterequest', this._onEditNoteRequest)
       if (this._onShowNoteRequest) minder.off('shownoterequest', this._onShowNoteRequest)
       if (this._onHideNoteRequest) minder.off('hidenoterequest', this._onHideNoteRequest)
+      if (this._onMouseMove) document.removeEventListener('mousemove', this._onMouseMove)
     },
 
     // ========== 链接 ==========
@@ -954,21 +990,26 @@ export default {
   z-index: 9999;
   background: #fffbe6;
   border: 1px solid #ffe58f;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 8px 12px;
-  max-width: 280px;
-  max-height: 160px;
-  overflow-y: auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-width: 240px;
+  /* 最多显示约 5 行 */
+  max-height: calc(13px * 1.5 * 5 + 16px);
+  overflow: hidden;
+  box-sizing: border-box;
+  /* 防止被 flex 父容器拉伸高度 */
+  align-self: flex-start;
+  height: auto !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
   pointer-events: none;
-  bottom: 60px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* 位置由 JS _calcTooltipPos 动态注入 */
 }
 
-.note-tooltip pre {
+.note-tooltip-text {
   margin: 0;
+  padding: 0;
   font-size: 13px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
