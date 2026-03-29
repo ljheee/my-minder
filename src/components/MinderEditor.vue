@@ -100,19 +100,52 @@ export default {
 
   beforeDestroy() {
     window.removeEventListener('resize', this.calcHeight)
+    // 解绑事件，避免内存泄漏
+    if (this.minderInstance) {
+      this.minderInstance.off('contentchange', this._onContentChange)
+      this.minderInstance.off('afterexeccommand', this._onContentChange)
+    }
   },
 
   methods: {
     // minder-editor 库组件 mounted 后触发（@hook:mounted），此时 window.minder 已赋值
     onMinderReady() {
-      this.minderInstance = window.minder
+      const captured = window.minder
+      this.minderInstance = captured
+      // 延迟绑定：importJson 初始化时会触发 contentchange/afterexeccommand，需要跳过
+      // 用 setTimeout 0 让初始化的事件先走完，再开始监听用户编辑
+      setTimeout(() => {
+        if (captured) {
+          // contentchange：文字输入提交时触发
+          captured.on('contentchange', this._onContentChange)
+          // afterexeccommand：Tab/Delete/移动等命令操作后触发
+          captured.on('afterexeccommand', this._onContentChange)
+        }
+      }, 0)
     },
+
+    _onContentChange() {
+      const minder = this.minderInstance
+      if (!minder) return
+      try {
+        const json = JSON.stringify(minder.exportJson())
+        this.$store.commit('files/UPDATE_FILE_CONTENT', json)
+      } catch (e) {
+        console.error('[MinderEditor] 导出失败:', e)
+      }
+    },
+
     calcHeight() {
       if (this.$el) this.height = Math.max(400, this.$el.clientHeight - 44)
     },
-    save() {
-      this.$store.dispatch('files/saveCurrentFile')
-      this.$message({ message: '保存成功', type: 'success', duration: 1500 })
+
+    async save() {
+      try {
+        await this.$store.dispatch('files/saveCurrentFile')
+        this.$message({ message: '保存成功', type: 'success', duration: 1500 })
+      } catch (err) {
+        this.$message.error('保存失败：' + err.message)
+      }
     }
   }
 }
