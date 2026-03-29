@@ -185,7 +185,7 @@
         </div>
         <div class="note-panel-footer">
           <button class="note-footer-btn note-footer-cancel" @click="noteDialogVisible = false">取消</button>
-          <button class="note-footer-btn note-footer-save" @click="applyNote">保存</button>
+          <button class="note-footer-btn note-footer-save" :disabled="!noteChanged" @click="applyNote">保存</button>
         </div>
       </div>
     </transition>
@@ -238,6 +238,7 @@ export default {
       // 备注
       noteDialogVisible: false,
       noteContent: '',
+      originalNote: '',  // 打开面板时的原始内容，用于判断是否有变化
 
       // 备注预览 tooltip
       noteTooltipVisible: false,
@@ -262,6 +263,10 @@ export default {
     },
     hasNote() {
       return this.selectedNode?.getData('note')
+    },
+    // 备注内容是否有实质变化（非空且与原始内容不同）
+    noteChanged() {
+      return this.noteContent.trim() !== '' && this.noteContent !== this.originalNote
     }
   },
 
@@ -488,6 +493,7 @@ export default {
       if (!this.checkSelection()) return
       this.targetNode = this.minder.getSelectedNode()
       this.noteContent = this.targetNode.getData('note') || ''
+      this.originalNote = this.noteContent  // 记录原始内容
       this.noteDialogVisible = true
       // 面板打开后聚焦 textarea
       this.$nextTick(() => {
@@ -920,20 +926,26 @@ export default {
   background: #ecf5ff !important;
 }
 
-/* 保存按钮：文字透明，hover 才显示文字和轮廓 */
-.note-panel-footer ::v-deep button.note-footer-save {
-  color: transparent !important;
-  border-color: transparent !important;
+/* 保存按钮：disabled 时灰色不可点击，有内容变化时蓝色可点击 */
+.note-panel-footer ::v-deep button.note-footer-save:disabled {
+  color: #c0c4cc !important;
+  border-color: #e4e7ed !important;
+  background: transparent !important;
+  cursor: not-allowed !important;
 }
-.note-panel-footer ::v-deep button.note-footer-save:hover {
+.note-panel-footer ::v-deep button.note-footer-save:not(:disabled) {
   color: #409eff !important;
-  border-color: rgba(64, 158, 255, 0.5) !important;
-  background: rgba(64, 158, 255, 0.06) !important;
-}
-.note-panel-footer ::v-deep button.note-footer-save:active {
-  color: #409eff !important;
-  background: rgba(64, 158, 255, 0.15) !important;
   border-color: #409eff !important;
+  background: transparent !important;
+}
+.note-panel-footer ::v-deep button.note-footer-save:not(:disabled):hover {
+  background: #ecf5ff !important;
+  border-color: #66b1ff !important;
+}
+.note-panel-footer ::v-deep button.note-footer-save:not(:disabled):active {
+  background: #d9ecff !important;
+  border-color: #3a8ee6 !important;
+  color: #3a8ee6 !important;
 }
 
 /* ===== 备注预览 tooltip ===== */
