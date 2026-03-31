@@ -35,6 +35,11 @@
         {{ displayName }}
       </span>
 
+      <!-- 最近修改时间（仅文件） -->
+      <span v-if="!isDir && item.lastCommitTime" class="node-time" :title="item.lastCommitTime">
+        {{ formatTime(item.lastCommitTime) }}
+      </span>
+
       <!-- 加载指示器（目录展开时） -->
       <span v-if="isDir && isLoading" class="node-loading">
         <div class="mini-spinner"></div>
@@ -47,6 +52,10 @@
         </button>
         <button v-if="isDir" class="action-btn" title="新建文件夹" @click="$emit('new-folder', item.path)">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10zm-8-1h2v-3h3v-2h-3V9h-2v3H9v2h3z"/></svg>
+        </button>
+        <!-- 导出 xmind（仅 .km 文件） -->
+        <button v-if="!isDir && item.name.endsWith('.km')" class="action-btn" title="导出为 .xmind" :disabled="isExporting" @click="handleExportXmind">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
         </button>
         <button class="action-btn" title="重命名" @click="$emit('rename', item)">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -90,6 +99,8 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
+import { kmStringToXmindDownload } from '@/utils/xmindConverter'
+import { getFileContent } from '@/api'
 
 export default {
   name: 'TreeNode',
@@ -116,7 +127,8 @@ export default {
 
   data() {
     return {
-      isExpanded: false
+      isExpanded: false,
+      isExporting: false
     }
   },
 
@@ -185,6 +197,43 @@ export default {
     showContextMenu() {
       // 右键菜单（简单实现，直接触发对应操作）
       // 可以后续扩展为真正的右键菜单
+    },
+
+    /** 导出当前 .km 文件为 .xmind 并下载 */
+    async handleExportXmind() {
+      if (this.isExporting) return
+      this.isExporting = true
+      try {
+        const owner = this.$store.getters['auth/owner']
+        const repo  = this.$store.getters['auth/repoName']
+        // 从 GitHub 读取最新内容
+        const file = await getFileContent(owner, repo, this.item.path)
+        const filename = this.item.name.replace(/\.km$/, '')
+        await kmStringToXmindDownload(file.content, filename)
+        this.$message({ message: `已导出 ${filename}.xmind`, type: 'success', duration: 1500 })
+      } catch (err) {
+        console.error('[TreeNode] 导出 xmind 失败:', err)
+        this.$message.error('导出失败：' + (err.message || err))
+      } finally {
+        this.isExporting = false
+      }
+    },
+
+    /** 格式化时间：显示为相对时间（如「3天前」）或日期 */
+    formatTime(isoStr) {
+      if (!isoStr) return ''
+      const now = Date.now()
+      const t = new Date(isoStr).getTime()
+      const diff = now - t
+      const min  = 60 * 1000
+      const hour = 60 * min
+      const day  = 24 * hour
+      if (diff < hour)  return `${Math.floor(diff / min)}分钟前`
+      if (diff < day)   return `${Math.floor(diff / hour)}小时前`
+      if (diff < 7 * day) return `${Math.floor(diff / day)}天前`
+      // 超过 7 天显示日期
+      const d = new Date(isoStr)
+      return `${d.getMonth() + 1}/${d.getDate()}`
     }
   }
 }
@@ -262,6 +311,19 @@ export default {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1;
+}
+
+.node-time {
+  font-size: 10px;
+  color: #45475a;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 2px;
+  transition: color 0.1s;
+}
+
+.node-row:hover .node-time {
+  color: #6c7086;
 }
 
 .node-loading {

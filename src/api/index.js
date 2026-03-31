@@ -27,4 +27,4 @@ export const {
 } = api
 
 // github.js 独有的工具函数（纯计算，与模式无关，始终从 github.js 导出）
-export { getUser, getFileBaseName, getParentPath, buildPath } from './github'
+export { getUser, getFileBaseName, getParentPath, buildPath, batchGetLastCommitTimes } from './github'

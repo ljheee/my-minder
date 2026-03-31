@@ -98,6 +98,16 @@ export default {
     CLEAR_TREE(state) {
       state.tree = {}
       state.currentFile = null
+    },
+
+    // 更新某个目录下某个文件的 lastCommitTime
+    SET_ITEM_COMMIT_TIME(state, { dirPath, filePath, time }) {
+      const dir = state.tree[dirPath]
+      if (!dir || !dir.items) return
+      const item = dir.items.find(i => i.path === filePath)
+      if (item) {
+        Vue.set(item, 'lastCommitTime', time)
+      }
     }
   },
 

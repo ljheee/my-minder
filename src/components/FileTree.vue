@@ -13,9 +13,27 @@
       </div>
       <!-- 根目录操作按钮 -->
       <div v-if="selectedRepo" class="root-actions">
-        <button class="icon-btn" title="新建脑图" @click="handleNewFile('')">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
-        </button>
+        <!-- 新建下拉菜单 -->
+        <div class="new-dropdown" v-click-outside="closeNewMenu">
+          <button class="icon-btn" title="新建" @click="toggleNewMenu">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+          </button>
+          <div v-if="showNewMenu" class="new-dropdown-menu">
+            <div class="dropdown-item" @click="handleNewFileFromMenu">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+              新建脑图
+            </div>
+            <div class="dropdown-item" @click="handleNewFolderFromMenu">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10zm-8-1h2v-3h3v-2h-3V9h-2v3H9v2h3z"/></svg>
+              新建文件夹
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-item" @click="handleImportXmind">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              导入 xmind
+            </div>
+          </div>
+        </div>
         <button class="icon-btn" title="新建文件夹" @click="handleNewFolder('')">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10zm-8-1h2v-3h3v-2h-3V9h-2v3H9v2h3z"/></svg>
         </button>
@@ -23,6 +41,8 @@
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         </button>
       </div>
+      <!-- 隐藏的 xmind 文件选择器 -->
+      <input ref="xmindFileInput" type="file" accept=".xmind" style="display:none" @change="onXmindFileSelected" />
     </div>
 
     <!-- 文件树内容 -->
@@ -209,13 +229,29 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
-import { listRepos, createRepo } from '@/api'
+import { listRepos, createRepo, putFile, batchGetLastCommitTimes } from '@/api'
+import { xmindFileToKmString } from '@/utils/xmindConverter'
 import TreeNode from './TreeNode.vue'
 
 export default {
   name: 'FileTree',
 
   components: { TreeNode },
+
+  directives: {
+    // 点击元素外部时触发回调
+    clickOutside: {
+      bind(el, binding) {
+        el.__clickOutsideHandler__ = (e) => {
+          if (!el.contains(e.target)) binding.value(e)
+        }
+        document.addEventListener('click', el.__clickOutsideHandler__)
+      },
+      unbind(el) {
+        document.removeEventListener('click', el.__clickOutsideHandler__)
+      }
+    }
+  },
 
   props: {
     currentFilePath: {
@@ -252,7 +288,12 @@ export default {
       moveItem: null,
       moveTargetDir: '',
       moveLoading: false,
-      allDirs: []
+      allDirs: [],
+
+      // 新建下拉菜单
+      showNewMenu: false,
+      // 导入 xmind
+      isImporting: false
     }
   },
 
@@ -302,9 +343,88 @@ export default {
     // selectRepo 不再通过 mapActions 映射，直接用 this.$store.dispatch 调用，避免名称冲突
     ...mapActions('files', ['loadDir', 'createFile', 'createDir', 'deleteFileItem', 'deleteDirItem', 'renameFileItem', 'moveFileItem']),
 
+    // ---- 新建下拉菜单 ----
+
+    toggleNewMenu() {
+      this.showNewMenu = !this.showNewMenu
+    },
+
+    closeNewMenu() {
+      this.showNewMenu = false
+    },
+
+    handleNewFileFromMenu() {
+      this.showNewMenu = false
+      this.handleNewFile('')
+    },
+
+    handleNewFolderFromMenu() {
+      this.showNewMenu = false
+      this.handleNewFolder('')
+    },
+
+    // ---- 导入 xmind ----
+
+    handleImportXmind() {
+      this.showNewMenu = false
+      this.$refs.xmindFileInput.value = ''
+      this.$refs.xmindFileInput.click()
+    },
+
+    async onXmindFileSelected(event) {
+      const file = event.target.files && event.target.files[0]
+      if (!file) return
+
+      this.isImporting = true
+      try {
+        // 1. 转换 xmind → km JSON
+        const kmJson = await xmindFileToKmString(file)
+
+        // 2. 询问保存文件名
+        const defaultName = file.name.replace(/\.xmind$/i, '')
+        let inputName
+        try {
+          const { value } = await this.$prompt(
+            '请输入保存的脑图文件名（无需加 .km）',
+            '导入 xmind',
+            {
+              confirmButtonText: '保存',
+              cancelButtonText: '取消',
+              inputValue: defaultName,
+              inputValidator: (v) => (v && v.trim() ? true : '文件名不能为空')
+            }
+          )
+          inputName = value.trim()
+        } catch {
+          return // 用户取消
+        }
+
+        // 3. 保存到 GitHub 根目录
+        const owner = this.$store.getters['auth/owner']
+        const repo  = this.$store.getters['auth/repoName']
+        const filePath = `${inputName}.km`
+        await putFile(owner, repo, filePath, kmJson, `import xmind: ${filePath}`)
+
+        // 4. 刷新文件树并自动打开
+        this.$store.commit('files/INVALIDATE_DIR', '')
+        await this.loadDir('')
+        await this.$store.dispatch('files/openFile', { path: filePath })
+        this.$emit('open-file', { path: filePath, name: `${inputName}.km` })
+
+        this.$message({ message: `导入成功，已保存为 ${filePath}`, type: 'success', duration: 2500 })
+      } catch (err) {
+        console.error('[FileTree] 导入 xmind 失败:', err)
+        this.$message.error('导入失败：' + (err.message || err))
+      } finally {
+        this.isImporting = false
+      }
+    },
+
     async loadRootDir() {
       try {
         await this.loadDir('')
+        // 异步拉取根目录文件的最后提交时间（不阻塞主流程）
+        this.fetchCommitTimes('')
       } catch (err) {
         this.$message.error('加载文件列表失败')
       }
@@ -313,6 +433,35 @@ export default {
     async refreshDir(path) {
       this.$store.commit('files/INVALIDATE_DIR', path)
       await this.loadDir(path)
+      this.fetchCommitTimes(path)
+    },
+
+    /**
+     * 批量拉取指定目录下所有 .km 文件的最后提交时间，并写入 store
+     * 异步执行，不阻塞 UI
+     */
+    async fetchCommitTimes(dirPath) {
+      const owner = this.$store.getters['auth/owner']
+      const repo  = this.$store.getters['auth/repoName']
+      if (!owner || !repo) return
+
+      const dir = this.$store.getters['files/getDir'](dirPath)
+      const kmFiles = (dir.items || []).filter(
+        i => i.type === 'file' && i.name.endsWith('.km')
+      )
+      if (kmFiles.length === 0) return
+
+      try {
+        const times = await batchGetLastCommitTimes(owner, repo, kmFiles.map(f => f.path))
+        for (const [filePath, time] of Object.entries(times)) {
+          if (time) {
+            this.$store.commit('files/SET_ITEM_COMMIT_TIME', { dirPath, filePath, time })
+          }
+        }
+      } catch (err) {
+        // 时间拉取失败不影响主功能，静默忽略
+        console.warn('[FileTree] fetchCommitTimes 失败:', err)
+      }
     },
 
     // ---- 仓库操作 ----
@@ -821,5 +970,56 @@ export default {
   font-size: 12px;
   color: #909399;
   margin: 4px 0 0;
+}
+
+/* 新建下拉菜单 */
+.new-dropdown {
+  position: relative;
+}
+
+.new-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: #313244;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #cdd6f4;
+  cursor: pointer;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  background: rgba(137, 180, 250, 0.12);
+  color: #89b4fa;
+}
+
+.dropdown-item svg {
+  flex-shrink: 0;
+  color: #6c7086;
+}
+
+.dropdown-item:hover svg {
+  color: #89b4fa;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
 }
 </style>

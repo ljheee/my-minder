@@ -25,6 +25,16 @@ module.exports = defineConfig({
     resolve: {
       alias: {
         'vue$': 'vue/dist/vue.esm.js'
+      },
+      // @ljheee/xmind-parser 中有 Node.js 专用代码（util、fs/promises），
+      // 这些代码只在运行时动态 import，浏览器端不会执行，
+      // 但 webpack 静态分析时会报错，用 false 告知 webpack 忽略即可
+      fallback: {
+        'util': false,
+        'fs': false,
+        'fs/promises': false,
+        'path': false,
+        'zlib': false
       }
     }
   },

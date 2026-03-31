@@ -303,3 +303,46 @@ export function buildPath(parentPath, name) {
   if (!parentPath || parentPath === '/') return name
   return `${parentPath}/${name}`
 }
+
+/**
+ * 获取单个文件的最后提交时间
+ * 调用 GitHub Commits API，取最新一条 commit 的时间
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} filePath - 文件路径
+ * @returns {Promise<string|null>} ISO 时间字符串，如 "2024-03-15T10:30:00Z"，失败返回 null
+ */
+export async function getFileLastCommitTime(owner, repo, filePath) {
+  try {
+    const encodedPath = encodeURIComponent(filePath).replace(/%2F/g, '/')
+    const { data } = await client().get(`/repos/${owner}/${repo}/commits`, {
+      params: { path: encodedPath, per_page: 1 }
+    })
+    if (data && data.length > 0) {
+      return data[0].commit.committer.date || data[0].commit.author.date || null
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 批量获取一组文件的最后提交时间（并发请求，最多同时 5 个）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string[]} filePaths
+ * @returns {Promise<{[path: string]: string|null}>}
+ */
+export async function batchGetLastCommitTimes(owner, repo, filePaths) {
+  const result = {}
+  const CONCURRENCY = 5
+  for (let i = 0; i < filePaths.length; i += CONCURRENCY) {
+    const batch = filePaths.slice(i, i + CONCURRENCY)
+    const times = await Promise.all(
+      batch.map(p => getFileLastCommitTime(owner, repo, p))
+    )
+    batch.forEach((p, idx) => { result[p] = times[idx] })
+  }
+  return result
+}
