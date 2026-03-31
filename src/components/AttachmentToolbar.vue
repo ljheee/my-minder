@@ -431,8 +431,71 @@ export default {
       // DOM 级别 fallback：直接在 SVG note 图标上绑定 mouseenter/mouseleave
       // 解决 kity 事件系统在某些环境下不触发 shownoterequest 的问题
       this._bindDomNoteIcons()
-      this._onLayoutDone = () => { this._bindDomNoteIcons() }
+      this._bindDomAttachmentIcons()
+      this._onLayoutDone = () => { this._bindDomNoteIcons(); this._bindDomAttachmentIcons() }
       minder.on('layoutallfinish layout', this._onLayoutDone)
+    },
+
+    // 扫描 SVG 里所有链接/图片图标，绑定 hover tooltip
+    _bindDomAttachmentIcons() {
+      try {
+        const minder = this.minder
+        if (!minder) return
+        const allNodes = minder.getAllNode ? minder.getAllNode() : []
+        allNodes.forEach(node => {
+          const hyperlink = node.getData('hyperlink')
+          const hyperlinkTitle = node.getData('hyperlinkTitle')
+          const image = node.getData('image')
+          const imageTitle = node.getData('imageTitle')
+          if (!hyperlink && !image) return
+
+          const rc = node.rc
+          if (!rc) return
+          const iconEls = rc.node ? rc.node.querySelectorAll('a, image') : []
+          iconEls.forEach(el => {
+            // 判断是链接图标还是图片
+            const isLink = el.tagName === 'a' || el.tagName === 'A'
+            const tooltipText = isLink
+              ? (hyperlinkTitle ? `${hyperlinkTitle}\n${hyperlink}` : hyperlink)
+              : (imageTitle || null)
+
+            // 每次都更新 tooltip 文本（支持 title 修改后刷新）
+            el._attachTooltipText = tooltipText || ''
+
+            // 只在首次绑定事件（避免重复注册）
+            // 注意：即使当前 tooltipText 为空也要绑定，因为用户可能后续添加 title
+            if (el._attachIconBound) return
+            el._attachIconBound = true
+
+            el.addEventListener('mouseenter', (ev) => {
+              // 运行时再判断是否有内容，支持 title 后续更新
+              if (!el._attachTooltipText) return
+              this._mouseX = ev.clientX
+              this._mouseY = ev.clientY
+              this.noteTooltipContent = el._attachTooltipText
+              this.noteTooltipStyle = this._calcTooltipPos(ev.clientX, ev.clientY)
+              this.noteTooltipVisible = true
+              this._tooltipAnchorX = ev.clientX
+              this._tooltipAnchorY = ev.clientY
+              this.$nextTick(() => {
+                if (this.noteTooltipVisible) {
+                  this.noteTooltipStyle = this._calcTooltipPos(this._tooltipAnchorX, this._tooltipAnchorY)
+                }
+              })
+            })
+            el.addEventListener('mouseleave', () => {
+              this.noteTooltipVisible = false
+            })
+            el.addEventListener('mousemove', (ev) => {
+              this._mouseX = ev.clientX
+              this._mouseY = ev.clientY
+              if (this.noteTooltipVisible) {
+                this.noteTooltipStyle = this._calcTooltipPos(ev.clientX, ev.clientY)
+              }
+            })
+          })
+        })
+      } catch (err) { /* ignore */ }
     },
 
     // 扫描 SVG 里所有 note 图标，直接绑定 DOM mouseenter/mouseleave
@@ -557,6 +620,7 @@ export default {
       this.restoreFocusAndSelect()
       this.minder.execCommand('hyperlink', url, title)
       this.$message.success('链接已添加')
+      setTimeout(() => { this._bindDomAttachmentIcons() }, 350)
     },
 
     removeLink() {
@@ -672,6 +736,8 @@ export default {
           this.restoreFocusAndSelect()
           this._applyImageToNode(url, title, w, h, MAX_W, MAX_H)
           this.$message.success('图片已添加')
+          // layout(300) 动画结束后再绑定，确保 SVG <image> 元素已渲染
+          setTimeout(() => { this._bindDomAttachmentIcons() }, 350)
         },
         () => {
           // 第二次：origin（带当前域名作为 Referer，部分站点需要）
@@ -680,6 +746,7 @@ export default {
               this.restoreFocusAndSelect()
               this._applyImageToNode(url, title, w, h, MAX_W, MAX_H)
               this.$message.success('图片已添加')
+              setTimeout(() => { this._bindDomAttachmentIcons() }, 350)
             },
             () => {
               // 两次都失败：用默认尺寸兜底插入，图片在节点中仍然存在
@@ -687,6 +754,7 @@ export default {
               this.restoreFocusAndSelect()
               this._applyImageToNode(url, title, 200, 150, MAX_W, MAX_H)
               this.$message.warning('图片链接已保存，但当前环境无法预览（可能有防盗链限制）')
+              setTimeout(() => { this._bindDomAttachmentIcons() }, 350)
             }
           )
         }
