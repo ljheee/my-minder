@@ -254,6 +254,12 @@ export default {
   width: auto !important;
 }
 
+/* 工具栏容器允许换行，防止按钮被挤出可视区域 */
+.mind-tab-panel .menu-container {
+  flex-wrap: wrap !important;
+  overflow: visible !important;
+}
+
 /* 优先级区域父容器：允许高度自动扩展，不被裁剪 */
 .mind-tab-panel .menu-container > div.sequence-group {
   overflow: visible !important;

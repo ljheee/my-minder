@@ -58,6 +58,7 @@
       width="400px"
       append-to-body
       custom-class="attachment-dialog"
+      @closed="onLinkDialogClosed"
     >
       <form class="attachment-form">
         <div class="form-group" :class="{ 'has-error': !urlPassed && linkUrlTouched }">
@@ -95,6 +96,7 @@
       width="500px"
       append-to-body
       custom-class="attachment-dialog"
+      @closed="onImageDialogClosed"
     >
       <el-tabs v-model="imageTab">
         <el-tab-pane label="外链图片" name="url">
@@ -229,6 +231,8 @@ export default {
       linkTitle: '',
       linkUrlTouched: false,
       urlPassed: true,
+      pendingLinkUrl: null,
+      pendingLinkTitle: null,
 
       // 图片
       imageDialogVisible: false,
@@ -240,6 +244,8 @@ export default {
       selectedFileName: '',
       imageUrlTouched: false,
       imageUrlPassed: true,
+      pendingImageUrl: null,   // 弹窗关闭后待执行的图片 URL
+      pendingImageTitle: null, // 弹窗关闭后待执行的图片 title
 
       // 备注
       noteDialogVisible: false,
@@ -531,19 +537,25 @@ export default {
         return
       }
 
-      // 确保使用 https:// 或 http:// 开头的 URL
       let url = this.linkUrl
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url
       }
 
-      // 恢复节点选中并确保 minder 获得焦点（弹窗关闭后焦点丢失会导致 execCommand 无效）
-      this.restoreFocusAndSelect()
-
-      // 使用 minder 的 execCommand
-      this.minder.execCommand('hyperlink', url, this.linkTitle)
-
+      this.pendingLinkUrl = url
+      this.pendingLinkTitle = this.linkTitle
       this.linkDialogVisible = false
+    },
+
+    onLinkDialogClosed() {
+      if (this.pendingLinkUrl == null) return
+      const url = this.pendingLinkUrl
+      const title = this.pendingLinkTitle
+      this.pendingLinkUrl = null
+      this.pendingLinkTitle = null
+
+      this.restoreFocusAndSelect()
+      this.minder.execCommand('hyperlink', url, title)
       this.$message.success('链接已添加')
     },
 
@@ -623,14 +635,84 @@ export default {
         }
       }
 
-      // 恢复节点选中并确保 minder 获得焦点
-      this.restoreFocusAndSelect()
-
-      // 使用库的 Image 命令（它会自动处理图片尺寸，并触发完整渲染流程）
-      this.minder.execCommand('image', imageUrl, this.imageTitle)
-
+      // 先记录待执行的参数，等弹窗完全关闭（@closed）后再执行 execCommand
+      // 原因：Dialog 关闭动画期间焦点会被夺走，此时 execCommand 找不到有效选中节点
+      this.pendingImageUrl = imageUrl
+      this.pendingImageTitle = this.imageTitle
       this.imageDialogVisible = false
-      this.$message.success('图片已添加')
+    },
+
+    onImageDialogClosed() {
+      if (this.pendingImageUrl == null) return
+      const url = this.pendingImageUrl
+      const title = this.pendingImageTitle
+      this.pendingImageUrl = null
+      this.pendingImageTitle = null
+
+      // 弹窗已完全关闭，先预加载图片拿到真实尺寸，再手动 setData 写入节点
+      // 不用 execCommand('image')，因为库内部会再创建一个 img 异步加载，
+      // 若那次 onerror（网络/跨域等原因），imageSize 会被设为 {width:0,height:0}，图片不可见
+      // 直接 setData 可以把我们已经拿到的真实尺寸写进去，确保渲染正确
+      const MAX_W = 200
+      const MAX_H = 200
+
+      // 尝试用 no-referrer 预加载（绕过大多数防盗链）
+      // 若成功则用真实尺寸；若失败则用默认尺寸兜底，图片仍然插入
+      const tryLoad = (referrerPolicy, onSuccess, onFail) => {
+        const img = new Image()
+        img.referrerPolicy = referrerPolicy
+        img.onload = () => onSuccess(img.width, img.height)
+        img.onerror = onFail
+        img.src = url
+      }
+
+      // 第一次：no-referrer（绕过防盗链）
+      tryLoad('no-referrer',
+        (w, h) => {
+          this.restoreFocusAndSelect()
+          this._applyImageToNode(url, title, w, h, MAX_W, MAX_H)
+          this.$message.success('图片已添加')
+        },
+        () => {
+          // 第二次：origin（带当前域名作为 Referer，部分站点需要）
+          tryLoad('origin',
+            (w, h) => {
+              this.restoreFocusAndSelect()
+              this._applyImageToNode(url, title, w, h, MAX_W, MAX_H)
+              this.$message.success('图片已添加')
+            },
+            () => {
+              // 两次都失败：用默认尺寸兜底插入，图片在节点中仍然存在
+              // （渲染时 kity 会再次尝试加载，部分情况下能成功）
+              this.restoreFocusAndSelect()
+              this._applyImageToNode(url, title, 200, 150, MAX_W, MAX_H)
+              this.$message.warning('图片链接已保存，但当前环境无法预览（可能有防盗链限制）')
+            }
+          )
+        }
+      )
+    },
+
+    // 直接操作节点数据写入图片，绕过库 execCommand 内部的异步 img 加载
+    _applyImageToNode(url, title, rawW, rawH, maxW, maxH) {
+      const node = this.targetNode
+      if (!node) return
+      // 按比例缩放到 maxW x maxH 以内
+      let w = rawW, h = rawH
+      const ratio = w / h
+      if (w > maxW) { w = maxW; h = w / ratio }
+      if (h > maxH) { h = maxH; w = h * ratio }
+      const size = { width: Math.round(w), height: Math.round(h) }
+      node.setData('image', url)
+      node.setData('imageTitle', title || null)
+      node.setData('imageSize', size)
+      if (node.attached) {
+        node.render()
+        this.minder.layout(300)
+        this.minder.fire('saveScene')
+        this.minder._firePharse({ type: 'contentchange' })
+        this.minder._interactChange()
+      }
     },
 
     removeImage() {
