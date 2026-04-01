@@ -70,7 +70,7 @@ export default {
     },
     fileName() {
       return this.fileData && this.fileData.name
-        ? this.fileData.name.replace(/\.km$/, '')
+        ? this.fileData.name.replace(/\.(km|xmind)$/i, '')
         : '未命名'
     },
     jsonData() {

@@ -43,6 +43,16 @@
       </div>
       <!-- 隐藏的 xmind 文件选择器 -->
       <input ref="xmindFileInput" type="file" accept=".xmind" style="display:none" @change="onXmindFileSelected" />
+      <!-- 本地调试模式：注入 .xmind 测试文件的隐藏输入框 -->
+      <input v-if="isLocalMode" ref="devXmindInput" type="file" accept=".xmind" style="display:none" @change="onDevXmindInject" />
+    </div>
+
+    <!-- 本地调试模式提示条 -->
+    <div v-if="isLocalMode" class="dev-banner">
+      <span>本地调试模式</span>
+      <button class="dev-inject-btn" @click="handleDevInjectXmind" title="将本地 .xmind 文件注入到文件列表，用于测试直接打开功能">
+        注入 .xmind 测试
+      </button>
     </div>
 
     <!-- 文件树内容 -->
@@ -176,7 +186,7 @@
           <el-input
             ref="renameInput"
             v-model="renameName"
-            :placeholder="renameItem && renameItem.type === 'file' ? '输入新文件名（无需加 .km）' : '输入新文件夹名'"
+            :placeholder="renameItem && renameItem.type === 'file' ? '输入新文件名（无需加扩展名）' : '输入新文件夹名'"
             @keyup.enter.native="confirmRename"
           />
         </el-form-item>
@@ -293,7 +303,9 @@ export default {
       // 新建下拉菜单
       showNewMenu: false,
       // 导入 xmind
-      isImporting: false
+      isImporting: false,
+      // 是否是本地调试模式
+      isLocalMode: process.env.VUE_APP_ENABLE_LOCAL_MODE === 'true'
     }
   },
 
@@ -369,6 +381,61 @@ export default {
       this.showNewMenu = false
       this.$refs.xmindFileInput.value = ''
       this.$refs.xmindFileInput.click()
+    },
+
+    // ---- 本地调试：注入 .xmind 测试文件 ----
+
+    handleDevInjectXmind() {
+      if (!this.$refs.devXmindInput) return
+      this.$refs.devXmindInput.value = ''
+      this.$refs.devXmindInput.click()
+    },
+
+    async onDevXmindInject(event) {
+      const file = event.target.files && event.target.files[0]
+      if (!file) return
+
+      try {
+        // 读取文件内容并转为 base64（模拟 GitHub API 存储格式）
+        const buffer = await file.arrayBuffer()
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i])
+        }
+        const base64 = btoa(binary)
+
+        // 直接写入 localStorage（本地模式存储）
+        const STORAGE_KEY = 'minder_local_dev_files'
+        const owner = this.$store.getters['auth/owner'] || 'local_dev'
+        const repo = this.$store.getters['auth/repoName'] || 'local-mindmaps'
+        const repoKey = `${owner}/${repo}`
+
+        const files = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+        if (!files[repoKey]) files[repoKey] = {}
+
+        const fileName = file.name // 保留原始文件名，如 naoTu.xmind
+        files[repoKey][fileName] = {
+          content: base64,
+          sha: `sha_dev_${Date.now()}`,
+          message: `dev inject: ${fileName}`,
+          updatedAt: new Date().toISOString()
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(files))
+
+        // 刷新文件树
+        this.$store.commit('files/INVALIDATE_DIR', '')
+        await this.loadDir('')
+
+        this.$message({
+          message: `✅ 已注入 ${fileName}，点击橙色图标文件即可测试打开`,
+          type: 'success',
+          duration: 4000
+        })
+      } catch (err) {
+        console.error('[FileTree] 注入 xmind 失败:', err)
+        this.$message.error('注入失败：' + (err.message || err))
+      }
     },
 
     async onXmindFileSelected(event) {
@@ -447,7 +514,7 @@ export default {
 
       const dir = this.$store.getters['files/getDir'](dirPath)
       const kmFiles = (dir.items || []).filter(
-        i => i.type === 'file' && i.name.endsWith('.km')
+        i => i.type === 'file' && (i.name.endsWith('.km') || i.name.toLowerCase().endsWith('.xmind'))
       )
       if (kmFiles.length === 0) return
 
@@ -558,9 +625,9 @@ export default {
 
     handleRename(item) {
       this.renameItem = item
-      // 去掉 .km 后缀显示
+      // 去掉 .km 或 .xmind 后缀显示
       this.renameName = item.type === 'file'
-        ? item.name.replace(/\.km$/, '')
+        ? item.name.replace(/\.(km|xmind)$/i, '')
         : item.name
       this.showRenameDialog = true
       this.$nextTick(() => this.$refs.renameInput?.focus())
@@ -577,10 +644,15 @@ export default {
 
       try {
         if (item.type === 'file') {
+          // 保留原始扩展名：.xmind 文件重命名后仍是 .xmind，.km 文件仍是 .km
+          const origExt = item.name.match(/\.(km|xmind)$/i)
+            ? item.name.match(/\.(km|xmind)$/i)[0]
+            : '.km'
           await this.renameFileItem({
             path: item.path,
             sha: item.sha,
             newName: this.renameName.trim(),
+            newExt: origExt,
             parentPath
           })
         } else {
@@ -1021,5 +1093,35 @@ export default {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
   margin: 4px 0;
+}
+
+/* 本地调试模式提示条 */
+.dev-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: rgba(249, 226, 175, 0.08);
+  border-bottom: 1px solid rgba(249, 226, 175, 0.15);
+  font-size: 11px;
+  color: #f9e2af;
+  gap: 6px;
+}
+
+.dev-inject-btn {
+  background: rgba(249, 226, 175, 0.12);
+  border: 1px solid rgba(249, 226, 175, 0.25);
+  color: #f9e2af;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.dev-inject-btn:hover {
+  background: rgba(249, 226, 175, 0.2);
+  border-color: rgba(249, 226, 175, 0.4);
 }
 </style>

@@ -114,15 +114,17 @@ export async function listContents(owner, repo, path = '') {
  * @param {string} owner
  * @param {string} repo
  * @param {string} path - 文件路径
- * @returns {Promise<{content: string, sha: string, name: string, path: string}>}
+ * @param {boolean} [rawBase64=false] - 若为 true，返回原始 base64 字符串（用于二进制文件如 .xmind）
+ * @returns {Promise<{content: string, rawBase64: string, sha: string, name: string, path: string}>}
  */
-export async function getFileContent(owner, repo, path) {
+export async function getFileContent(owner, repo, path, rawBase64 = false) {
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   const { data } = await client().get(`/repos/${owner}/${repo}/contents/${encodedPath}`)
   // GitHub 返回的 content 是 base64 编码的
-  const content = decodeBase64(data.content)
+  const content = rawBase64 ? data.content : decodeBase64(data.content)
   return {
     content,
+    rawBase64: data.content, // 始终保留原始 base64，供二进制格式使用
     sha: data.sha,
     name: data.name,
     path: data.path,
@@ -138,13 +140,14 @@ export async function getFileContent(owner, repo, path) {
  * @param {string} content - 文件内容（字符串）
  * @param {string} message - commit 消息
  * @param {string} [sha] - 更新时需要传入当前文件的 sha
+ * @param {boolean} [isBase64=false] - 若为 true，content 已是 base64 字符串，直接使用（用于二进制文件如 .xmind）
  * @returns {Promise<{sha: string, path: string}>}
  */
-export async function putFile(owner, repo, path, content, message, sha = null) {
+export async function putFile(owner, repo, path, content, message, sha = null, isBase64 = false) {
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
   const body = {
     message,
-    content: encodeBase64(content)
+    content: isBase64 ? content : encodeBase64(content)
   }
   if (sha) {
     body.sha = sha
@@ -180,13 +183,16 @@ export async function deleteFile(owner, repo, path, sha, message) {
  * @param {string} newPath - 新路径
  * @param {string} oldSha - 旧文件的 sha
  * @param {string} content - 文件内容
+ * @param {boolean} [isBase64=false] - 若为 true，content 已是 base64 字符串（用于 .xmind 等二进制文件）
  * @returns {Promise<{sha: string, path: string}>}
  */
-export async function renameFile(owner, repo, oldPath, newPath, oldSha, content) {
+export async function renameFile(owner, repo, oldPath, newPath, oldSha, content, isBase64 = false) {
   // 1. 在新路径创建文件
   const result = await putFile(
     owner, repo, newPath, content,
-    `rename: ${oldPath} → ${newPath}`
+    `rename: ${oldPath} → ${newPath}`,
+    null,
+    isBase64
   )
   // 2. 删除旧路径文件
   await deleteFile(
@@ -281,10 +287,11 @@ function decodeBase64(str) {
 
 /**
  * 从路径中提取文件名（不含扩展名）
+ * 支持 .km 和 .xmind 后缀
  */
 export function getFileBaseName(path) {
   const name = path.split('/').pop()
-  return name.replace(/\.km$/, '')
+  return name.replace(/\.(km|xmind)$/i, '')
 }
 
 /**

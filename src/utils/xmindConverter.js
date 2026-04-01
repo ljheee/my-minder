@@ -24,6 +24,74 @@ export async function xmindFileToKmString(file) {
 }
 
 /**
+ * 将 base64 编码的 .xmind 文件内容（来自 GitHub API）转换为 KityMinder JSON 字符串
+ * 若文件包含多个画布（sheet），只取第一个
+ *
+ * @param {string} base64Content - GitHub API 返回的 base64 编码内容（可含换行符）
+ * @returns {Promise<{ kmString: string, sheetCount: number }>}
+ *   kmString: KityMinder JSON 字符串
+ *   sheetCount: 原始 sheet 数量（>1 时可提示用户）
+ */
+export async function xmindBase64ToKmString(base64Content) {
+  const { xmindBufferToKm } = await import('@ljheee/xmind-parser')
+
+  // 清理 GitHub 返回的 base64（含换行符）
+  const cleaned = base64Content.replace(/\n/g, '').replace(/\\/g, '')
+  const binaryStr = atob(cleaned)
+  const bytes = new Uint8Array(binaryStr.length)
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i)
+  }
+  const buffer = bytes.buffer
+
+  const sheets = await xmindBufferToKm(buffer, { firstSheetOnly: false })
+
+  if (!sheets || sheets.length === 0) {
+    throw new Error('解析失败：未找到有效的脑图内容')
+  }
+
+  return {
+    kmString: JSON.stringify(sheets[0], null, 2),
+    sheetCount: sheets.length
+  }
+}
+
+/**
+ * 将 KityMinder JSON 字符串转换为 .xmind ArrayBuffer（不触发下载）
+ * 用于保存回 GitHub
+ *
+ * @param {string} kmJsonString - KityMinder JSON 字符串（.km 文件内容）
+ * @returns {Promise<ArrayBuffer>}
+ */
+export async function kmStringToXmindBuffer(kmJsonString) {
+  const { kmToXmindBuffer } = await import('@ljheee/xmind-parser')
+
+  let kmData
+  try {
+    kmData = JSON.parse(kmJsonString)
+  } catch (e) {
+    throw new Error('脑图数据格式错误，无法转换为 xmind')
+  }
+
+  return kmToXmindBuffer(kmData, { format: 'xmind2020' })
+}
+
+/**
+ * 将 ArrayBuffer 转换为 base64 字符串（用于 GitHub API 上传）
+ *
+ * @param {ArrayBuffer} buffer
+ * @returns {string} base64 字符串
+ */
+export function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+/**
  * 将 KityMinder JSON 字符串导出为 .xmind 文件并触发浏览器下载
  *
  * @param {string} kmJsonString - KityMinder JSON 字符串（.km 文件内容）

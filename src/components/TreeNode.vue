@@ -20,10 +20,14 @@
       <span v-else class="expand-placeholder"></span>
 
       <!-- 图标 -->
-      <span class="node-icon">
+      <span class="node-icon" :class="{ 'node-icon--xmind': isXmindFile }">
         <svg v-if="isDir" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
           <path v-if="isExpanded" d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
           <path v-else d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>
+        <!-- .xmind 文件用带标记的图标区分 -->
+        <svg v-else-if="isXmindFile" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+          <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-5-5l-2-2-2 2-1-1 2-2-2-2 1-1 2 2 2-2 1 1-2 2 2 2-1 1z"/>
         </svg>
         <svg v-else viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
           <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
@@ -53,7 +57,7 @@
         <button v-if="isDir" class="action-btn" title="新建文件夹" @click="$emit('new-folder', item.path)">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10zm-8-1h2v-3h3v-2h-3V9h-2v3H9v2h3z"/></svg>
         </button>
-        <!-- 导出 xmind（仅 .km 文件） -->
+        <!-- 导出 xmind（.km 文件导出为 .xmind；.xmind 文件本身就是 xmind 格式，不需要导出按鈕） -->
         <button v-if="!isDir && item.name.endsWith('.km')" class="action-btn" title="导出为 .xmind" :disabled="isExporting" @click="handleExportXmind">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
         </button>
@@ -143,10 +147,16 @@ export default {
       return !this.isDir && this.item.path === this.currentFilePath
     },
 
-    // 文件显示名（.km 文件去掉后缀）
+    // 是否是 .xmind 文件
+    isXmindFile() {
+      return !this.isDir && this.item.name.toLowerCase().endsWith('.xmind')
+    },
+
+    // 文件显示名（.km 和 .xmind 文件去掉后缀）
     displayName() {
-      if (!this.isDir && this.item.name.endsWith('.km')) {
-        return this.item.name.slice(0, -3)
+      if (!this.isDir) {
+        if (this.item.name.endsWith('.km')) return this.item.name.slice(0, -3)
+        if (this.isXmindFile) return this.item.name.slice(0, -6)
       }
       // 隐藏 .gitkeep 文件
       return this.item.name
@@ -177,7 +187,7 @@ export default {
     handleClick() {
       if (this.isDir) {
         this.toggleExpand()
-      } else if (this.item.name.endsWith('.km')) {
+      } else if (this.item.name.endsWith('.km') || this.isXmindFile) {
         this.$emit('open-file', { path: this.item.path, name: this.item.name })
       }
     },
@@ -301,6 +311,11 @@ export default {
 
 .is-dir .node-icon {
   color: #f9e2af;
+}
+
+/* .xmind 文件用橙色图标区分 */
+.node-icon--xmind {
+  color: #fab387;
 }
 
 .node-name {

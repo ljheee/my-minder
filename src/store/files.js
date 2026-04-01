@@ -14,6 +14,11 @@ import {
   createFolder,
   deleteFolder
 } from '@/api'
+import {
+  xmindBase64ToKmString,
+  kmStringToXmindBuffer,
+  arrayBufferToBase64
+} from '@/utils/xmindConverter'
 
 export default {
   namespaced: true,
@@ -134,6 +139,7 @@ export default {
 
     /**
      * 打开文件（读取内容）
+     * 支持 .km 和 .xmind 格式：.xmind 会自动转换为 KityMinder JSON 后加载
      */
     async openFile({ commit, rootGetters }, { path }) {
       const owner = rootGetters['auth/owner']
@@ -143,17 +149,36 @@ export default {
       commit('SET_FILE_LOADING', true)
       commit('SET_ERROR', null)
       try {
+        const isXmind = path.toLowerCase().endsWith('.xmind')
+
+        // 对于 .xmind 文件，需要保留原始 base64 以便转换
         const file = await getFileContent(owner, repo, path)
-        console.log('[store/files] 文件内容获取成功，长度:', file.content.length, '内容预览:', file.content.substring(0, 100))
+
+        let content = file.content
+        let originalFormat = null
+        let sheetCount = 1
+
+        if (isXmind) {
+          console.log('[store/files] 检测到 .xmind 文件，开始转换...')
+          const result = await xmindBase64ToKmString(file.rawBase64)
+          content = result.kmString
+          sheetCount = result.sheetCount
+          originalFormat = 'xmind'
+          console.log('[store/files] .xmind 转换完成，sheet 数量:', sheetCount)
+        }
+
+        console.log('[store/files] 文件内容获取成功，长度:', content.length, '内容预览:', content.substring(0, 100))
         commit('SET_CURRENT_FILE', {
           path: file.path,
           name: file.name,
-          content: file.content,
+          content,
           sha: file.sha,
-          dirty: false
+          dirty: false,
+          originalFormat, // null 表示 .km，'xmind' 表示原始格式为 .xmind
+          sheetCount      // 多 sheet 时可在 UI 提示用户
         })
         console.log('[store/files] currentFile 已更新')
-        return file
+        return { ...file, content, originalFormat, sheetCount }
       } catch (err) {
         console.error('[store/files] 打开文件失败:', err)
         commit('SET_ERROR', `打开文件失败: ${err.message}`)
@@ -165,6 +190,7 @@ export default {
 
     /**
      * 保存当前文件
+     * 支持 .km 和 .xmind 格式：.xmind 会自动将 KityMinder JSON 转回 .xmind 格式再写入
      */
     async saveCurrentFile({ commit, state, rootGetters }) {
       if (!state.currentFile) return
@@ -174,12 +200,25 @@ export default {
       commit('SET_FILE_SAVING', true)
       commit('SET_ERROR', null)
       try {
+        const isXmind = state.currentFile.originalFormat === 'xmind'
+        let contentToSave = state.currentFile.content
+        let isBase64 = false
+
+        if (isXmind) {
+          console.log('[store/files] 保存 .xmind 文件，将 KityMinder JSON 转回 .xmind 格式...')
+          const buffer = await kmStringToXmindBuffer(state.currentFile.content)
+          contentToSave = arrayBufferToBase64(buffer)
+          isBase64 = true
+          console.log('[store/files] .xmind 转换完成，base64 长度:', contentToSave.length)
+        }
+
         const result = await putFile(
           owner, repo,
           state.currentFile.path,
-          state.currentFile.content,
+          contentToSave,
           `update: ${state.currentFile.name}`,
-          state.currentFile.sha
+          state.currentFile.sha,
+          isBase64
         )
         // 更新 sha（下次保存需要最新的 sha）
         commit('SET_CURRENT_FILE', {
@@ -284,19 +323,26 @@ export default {
 
     /**
      * 重命名文件
+     * @param {string} newExt - 目标扩展名（含点号，如 '.km' 或 '.xmind'），默认 '.km'
      */
-    async renameFileItem({ commit, dispatch, state, rootGetters }, { path, sha, newName, parentPath }) {
+    async renameFileItem({ commit, dispatch, state, rootGetters }, { path, sha, newName, newExt = '.km', parentPath }) {
       const owner = rootGetters['auth/owner']
       const repo = rootGetters['auth/repoName']
 
-      // 构建新路径
-      const newFileName = newName.endsWith('.km') ? newName : `${newName}.km`
+      // 构建新路径，保留原始扩展名
+      const ext = newExt.startsWith('.') ? newExt : `.${newExt}`
+      const newFileName = newName.toLowerCase().endsWith(ext.toLowerCase())
+        ? newName
+        : `${newName}${ext}`
       const newPath = parentPath ? `${parentPath}/${newFileName}` : newFileName
 
       try {
         // 先读取文件内容
+        // .xmind 文件是二进制，需要用 rawBase64 直接传递，避免解码再编码导致损坏
+        const isXmindRename = path.toLowerCase().endsWith('.xmind')
         const file = await getFileContent(owner, repo, path)
-        await renameFile(owner, repo, path, newPath, sha, file.content)
+        const contentForRename = isXmindRename ? file.rawBase64 : file.content
+        await renameFile(owner, repo, path, newPath, sha, contentForRename, isXmindRename)
 
         // 如果重命名的是当前打开的文件，更新状态
         if (state.currentFile && state.currentFile.path === path) {
@@ -327,8 +373,11 @@ export default {
       const oldParentPath = path.split('/').slice(0, -1).join('/')
 
       try {
+        // .xmind 文件是二进制，需要用 rawBase64 直接传递
+        const isXmindMove = path.toLowerCase().endsWith('.xmind')
         const file = await getFileContent(owner, repo, path)
-        await renameFile(owner, repo, path, newPath, sha, file.content)
+        const contentForMove = isXmindMove ? file.rawBase64 : file.content
+        await renameFile(owner, repo, path, newPath, sha, contentForMove, isXmindMove)
 
         // 如果移动的是当前打开的文件，更新状态
         if (state.currentFile && state.currentFile.path === path) {

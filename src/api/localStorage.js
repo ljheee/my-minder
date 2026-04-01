@@ -137,6 +137,10 @@ export async function listContents(owner, repo, path = '') {
 
 /**
  * 读取文件内容
+ *
+ * 本地模式内容存储规则：
+ *   - .km 文件：content 存储 JSON 字符串，rawBase64 为 null
+ *   - .xmind 文件：content 存储 base64 字符串（模拟 GitHub API 行为），rawBase64 同上
  */
 export async function getFileContent(owner, repo, path) {
   const files = getLocalFiles()
@@ -148,8 +152,13 @@ export async function getFileContent(owner, repo, path) {
     throw new Error('File not found: ' + path)
   }
 
+  const isXmind = path.toLowerCase().endsWith('.xmind')
+
   return {
+    // .xmind 文件：content 就是 base64（不解码）；.km 文件：content 是字符串
     content: fileData.content,
+    // rawBase64 与 github.js 保持一致：.xmind 文件返回 base64，.km 文件返回 null
+    rawBase64: isXmind ? fileData.content : null,
     sha: fileData.sha,
     name: path.split('/').pop(),
     path: path,
@@ -159,8 +168,9 @@ export async function getFileContent(owner, repo, path) {
 
 /**
  * 创建或更新文件
+ * @param {boolean} [isBase64=false] - 若为 true，content 已是 base64（.xmind 二进制文件），直接存储
  */
-export async function putFile(owner, repo, path, content, message) {
+export async function putFile(owner, repo, path, content, message, sha = null, isBase64 = false) {
   const files = getLocalFiles()
   const repoKey = `${owner}/${repo}`
 
@@ -169,6 +179,7 @@ export async function putFile(owner, repo, path, content, message) {
   }
 
   const newSha = `sha_${Date.now()}`
+  // isBase64=true 时 content 已是 base64（.xmind），直接存储；否则存字符串
   files[repoKey][path] = {
     content,
     sha: newSha,
@@ -195,9 +206,10 @@ export async function deleteFile(owner, repo, path) {
 
 /**
  * 重命名文件
+ * @param {boolean} [isBase64=false] - 若为 true，content 已是 base64（.xmind 二进制文件）
  */
-export async function renameFile(owner, repo, oldPath, newPath, oldSha, content) {
-  await putFile(owner, repo, newPath, content, `rename: ${oldPath} → ${newPath}`)
+export async function renameFile(owner, repo, oldPath, newPath, oldSha, content, isBase64 = false) {
+  await putFile(owner, repo, newPath, content, `rename: ${oldPath} → ${newPath}`, null, isBase64)
   await deleteFile(owner, repo, oldPath)
   return { sha: `sha_${Date.now()}`, path: newPath }
 }

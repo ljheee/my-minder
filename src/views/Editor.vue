@@ -96,7 +96,7 @@ export default {
     },
 
     currentFileName() {
-      return this.currentFile?.name?.replace(/\.km$/, '') || '未命名'
+      return this.currentFile?.name?.replace(/\.(km|xmind)$/i, '') || '未命名'
     }
   },
 
@@ -135,7 +135,16 @@ export default {
         }
       }
       try {
-        await this.openFile({ path })
+        const result = await this.openFile({ path })
+        // .xmind 文件包含多个画布时，提示用户只显示第一个
+        if (result && result.originalFormat === 'xmind' && result.sheetCount > 1) {
+          this.$message({
+            message: `此 .xmind 文件包含 ${result.sheetCount} 个画布，当前仅显示第一个画布。保存后将只保留第一个画布。`,
+            type: 'warning',
+            duration: 5000,
+            showClose: true
+          })
+        }
       } catch (err) {
         this.$message.error('打开文件失败：' + err.message)
       }
