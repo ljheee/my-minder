@@ -214,12 +214,23 @@ export default {
       if (this.isExporting) return
       this.isExporting = true
       try {
-        const owner = this.$store.getters['auth/owner']
-        const repo  = this.$store.getters['auth/repoName']
-        // 从 GitHub 读取最新内容
-        const file = await getFileContent(owner, repo, this.item.path)
         const filename = this.item.name.replace(/\.km$/, '')
-        await kmStringToXmindDownload(file.content, filename)
+
+        // 优先使用内存中的最新内容（含 blob: URL 图片，resolveBlobUrls 可正常 fetch）
+        // 若从存储重新读取，blob: URL 已失效，图片会丢失
+        const currentFile = this.$store.getters['files/currentFile']
+        let kmContent
+        if (currentFile && currentFile.path === this.item.path) {
+          kmContent = currentFile.content
+        } else {
+          // 导出的不是当前打开的文件，从存储读取（此时文件中不会有 blob URL）
+          const owner = this.$store.getters['auth/owner']
+          const repo  = this.$store.getters['auth/repoName']
+          const file = await getFileContent(owner, repo, this.item.path)
+          kmContent = file.content
+        }
+
+        await kmStringToXmindDownload(kmContent, filename)
         this.$message({ message: `已导出 ${filename}.xmind`, type: 'success', duration: 1500 })
       } catch (err) {
         console.error('[TreeNode] 导出 xmind 失败:', err)

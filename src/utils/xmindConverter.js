@@ -57,6 +57,41 @@ export async function xmindBase64ToKmString(base64Content) {
 }
 
 /**
+ * 递归遍历 km 节点树，将所有 blob: URL 图片异步 fetch 并转换为 base64 data URL。
+ * KityMinder 本地上传图片时 data.image 存的是 blob: URL（createObjectURL 生成），
+ * 这类 URL 只在当前浏览器会话有效，写入 xmind 文件后 XMind 无法读取。
+ * 导出前调用此函数，确保所有图片都是可持久化的 data URL 或 xap: 路径。
+ *
+ * @param {object} kmNode - km 节点（含 data 和 children）
+ * @returns {Promise<void>}
+ */
+async function resolveBlobUrls(kmNode) {
+  if (!kmNode) return
+  const data = kmNode.data
+  if (data && data.image && typeof data.image === 'string' && data.image.startsWith('blob:')) {
+    try {
+      const resp = await fetch(data.image)
+      const blob = await resp.blob()
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      data.image = dataUrl
+    } catch (e) {
+      console.warn('[xmindConverter] blob URL 转换失败，图片将丢失:', data.image, e)
+      // 转换失败时清除，避免写入无效 blob URL
+      delete data.image
+      delete data.imageSize
+    }
+  }
+  if (Array.isArray(kmNode.children)) {
+    await Promise.all(kmNode.children.map(child => resolveBlobUrls(child)))
+  }
+}
+
+/**
  * 将 KityMinder JSON 字符串转换为 .xmind ArrayBuffer（不触发下载）
  * 用于保存回 GitHub
  *
@@ -72,6 +107,9 @@ export async function kmStringToXmindBuffer(kmJsonString) {
   } catch (e) {
     throw new Error('脑图数据格式错误，无法转换为 xmind')
   }
+
+  // 导出前将所有 blob: URL 转为 base64 data URL，确保图片可持久化
+  if (kmData.root) await resolveBlobUrls(kmData.root)
 
   return kmToXmindBuffer(kmData, { format: 'xmind2020' })
 }
@@ -107,6 +145,9 @@ export async function kmStringToXmindDownload(kmJsonString, filename = 'mindmap'
   } catch (e) {
     throw new Error('脑图数据格式错误，无法导出')
   }
+
+  // 导出前将所有 blob: URL 转为 base64 data URL，确保图片可持久化
+  if (kmData.root) await resolveBlobUrls(kmData.root)
 
   const buffer = kmToXmindBuffer(kmData, { format: 'xmind2020' })
   downloadArrayBuffer(buffer, `${filename}.xmind`)
