@@ -640,14 +640,28 @@ export default {
     showImageDialog() {
       if (!this.checkSelection()) return
       this.targetNode = this.minder.getSelectedNode()
-      this.imageUrl = this.targetNode.getData('image') || ''
+      const existingImage = this.targetNode.getData('image') || ''
       this.imageTitle = this.targetNode.getData('imageTitle') || ''
-      this.imagePreview = this.imageUrl
-      this.imageDataUrl = ''
-      this.selectedFileName = ''
-      this.imageTab = 'url'
       this.imageUrlTouched = false
-      this.imageUrlPassed = /^https?:\/\/\w+/.test(this.imageUrl)
+
+      if (existingImage.startsWith('data:')) {
+        // 已有图片是 base64（本地上传），切换到上传 tab 并恢复预览
+        this.imageTab = 'upload'
+        this.imageUrl = ''
+        this.imageDataUrl = existingImage
+        this.imagePreview = existingImage
+        this.selectedFileName = '（已上传的图片）'
+        this.imageUrlPassed = true
+      } else {
+        // 已有图片是外链 URL，或没有图片
+        this.imageTab = 'url'
+        this.imageUrl = existingImage
+        this.imageDataUrl = ''
+        this.imagePreview = existingImage
+        this.selectedFileName = ''
+        this.imageUrlPassed = /^https?:\/\/\w+/.test(existingImage)
+      }
+
       this.imageDialogVisible = true
     },
 
