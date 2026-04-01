@@ -170,7 +170,7 @@ export async function getFileContent(owner, repo, path) {
  * 创建或更新文件
  * @param {boolean} [isBase64=false] - 若为 true，content 已是 base64（.xmind 二进制文件），直接存储
  */
-export async function putFile(owner, repo, path, content, message, sha = null, isBase64 = false) {
+export async function putFile(owner, repo, path, content, message, _sha = null, _isBase64 = false) { // eslint-disable-line no-unused-vars
   const files = getLocalFiles()
   const repoKey = `${owner}/${repo}`
 
